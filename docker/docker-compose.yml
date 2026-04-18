@@ -1,0 +1,32 @@
+services:
+  ai-agent-os:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: ai-agent-os:latest
+    environment:
+      DOGE_PROVIDER: ${DOGE_PROVIDER:-anthropic}
+      DOGE_MODEL: ${DOGE_MODEL:-claude-3-5-sonnet-latest}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DOGE_CUSTOM_API_KEY: ${DOGE_CUSTOM_API_KEY:-}
+      DOGE_CUSTOM_BASE_URL: ${DOGE_CUSTOM_BASE_URL:-}
+      DOGE_CUSTOM_MODEL: ${DOGE_CUSTOM_MODEL:-}
+      DOGE_PERMISSION_MODE: ${DOGE_PERMISSION_MODE:-default}
+      DOGE_LOG_LEVEL: ${DOGE_LOG_LEVEL:-info}
+      DOGE_FEATURE_BUDDY: ${DOGE_FEATURE_BUDDY:-false}
+      DOGE_FEATURE_KAIROS: ${DOGE_FEATURE_KAIROS:-false}
+      DOGE_FEATURE_ULTRAPLAN: ${DOGE_FEATURE_ULTRAPLAN:-false}
+      DOGE_FEATURE_COORDINATOR: ${DOGE_FEATURE_COORDINATOR:-false}
+      DOGE_FEATURE_BRIDGE: ${DOGE_FEATURE_BRIDGE:-false}
+      DOGE_HOME: /home/node/.doge
+      DOGE_WORKSPACE: /workspace
+    volumes:
+      - ../workspace:/workspace
+      - doge-home:/home/node/.doge
+    stdin_open: true
+    tty: true
+    command: ["--help"]
+
+volumes:
+  doge-home:
