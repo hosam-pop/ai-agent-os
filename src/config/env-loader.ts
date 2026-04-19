@@ -46,6 +46,9 @@ const EnvSchema = z.object({
   DOGE_FEATURE_DAST: z.coerce.boolean().default(false),
   DOGE_FEATURE_LOG_ANALYSIS: z.coerce.boolean().default(false),
   DOGE_FEATURE_IDS: z.coerce.boolean().default(false),
+  DOGE_FEATURE_CONTAINER_SCAN: z.coerce.boolean().default(false),
+  DOGE_FEATURE_RUNTIME_MONITOR: z.coerce.boolean().default(false),
+  DOGE_FEATURE_ORCHESTRATION: z.coerce.boolean().default(false),
 
   MEM0_API_KEY: z.string().optional(),
   MEM0_ORG_ID: z.string().optional(),
@@ -81,8 +84,12 @@ const EnvSchema = z.object({
 
   SEMGREP_BIN: z.string().optional(),
   CODEQL_BIN: z.string().optional(),
+  BEARER_BIN: z.string().optional(),
   NUCLEI_BIN: z.string().optional(),
   ZAP_BIN: z.string().optional(),
+  GRYPE_BIN: z.string().optional(),
+  TRIVY_BIN: z.string().optional(),
+  FALCO_LOG_PATH: z.string().optional(),
 
   ELASTIC_URL: z.string().url().optional(),
   ELASTIC_API_KEY: z.string().optional(),

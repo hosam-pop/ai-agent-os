@@ -40,16 +40,33 @@ missing instead of crashing the agent.
 
 | Family | Purpose | Engines / clients | Feature flag |
 | --- | --- | --- | --- |
-| `sast/` | Static code analysis — find bugs and vulnerabilities in source before it ships | [Semgrep](https://github.com/semgrep/semgrep) (via `semgrep --json`), [CodeQL](https://github.com/github/codeql) (via `codeql database analyze ... --format=sarif-latest`) | `DOGE_FEATURE_SAST` |
+| `sast/` | Static code analysis — find bugs and vulnerabilities in source before it ships | [Semgrep](https://github.com/semgrep/semgrep) (via `semgrep --json`), [CodeQL](https://github.com/github/codeql) (via `codeql database analyze ... --format=sarif-latest`), [Bearer](https://github.com/Bearer/bearer) (via `bearer scan ... --format json`) | `DOGE_FEATURE_SAST` |
 | `dast/` | Dynamic analysis of running web apps | [Nuclei](https://github.com/projectdiscovery/nuclei) (JSONL streaming), [OWASP ZAP](https://github.com/zaproxy/zaproxy) baseline (JSON report) | `DOGE_FEATURE_DAST` |
+| `container/` | Container-image and SBOM vulnerability scanning | [Grype](https://github.com/anchore/grype) (`grype <target> -o json`), [Trivy](https://github.com/aquasecurity/trivy) (`trivy image/fs/repo --format json`) | `DOGE_FEATURE_CONTAINER_SCAN` |
 | `log-analysis/` | Threat hunting across centralised logs | [Elasticsearch / ELK](https://github.com/elastic/elasticsearch) (`_search` DSL), [Wazuh](https://github.com/wazuh/wazuh) REST API | `DOGE_FEATURE_LOG_ANALYSIS` |
 | `ids/` | Monitor network traffic for malicious activity | [Suricata](https://github.com/OISF/suricata) `eve.json` stream reader | `DOGE_FEATURE_IDS` |
+| `runtime/` | Runtime-security telemetry from Linux kernel hooks | [Falco](https://github.com/falcosecurity/falco) JSON log reader (`/var/log/falco/falco.json`) | `DOGE_FEATURE_RUNTIME_MONITOR` |
 
 Each family exposes a single unified tool to the agent (`sast`, `dast`,
-`log_analysis`, `ids`) that selects the concrete engine at call time. Parsers
-are pure functions — the heavy lifting (process execution, HTTP, streaming
-files) is isolated in the runners / clients so the parsing logic is easy to
-unit-test without touching the network or any external binary.
+`container_scan`, `log_analysis`, `ids`, `runtime_monitor`) that selects the
+concrete engine at call time. Parsers are pure functions — the heavy lifting
+(process execution, HTTP, streaming files) is isolated in the runners /
+clients so the parsing logic is easy to unit-test without touching the
+network or any external binary.
+
+## Agent orchestration primitives (`src/orchestration/`)
+
+Four lightweight orchestration building blocks, each inspired by a widely
+used open-source framework and ported as a native TypeScript module. They
+are library-level primitives — enable `DOGE_FEATURE_ORCHESTRATION=true` to
+signal they are in use and import them directly from `src/orchestration/`.
+
+| Primitive | Inspiration | What it models |
+| --- | --- | --- |
+| `Crew` (`crew.ts`) | [CrewAI](https://github.com/crewAIInc/crewAI) | A team of role-bearing agents executing a task list sequentially or hierarchically, with dependency-aware ordering. |
+| `GroupChat` (`group-chat.ts`) | [AutoGen](https://github.com/microsoft/autogen) | Multi-agent conversations with pluggable speaker selectors (round-robin, keyword) and termination predicates. |
+| `StateGraph` (`state-graph.ts`) | [LangGraph](https://github.com/langchain-ai/langgraph) | Directed graph of async nodes over an immutable state, with conditional routing and an `END` sentinel. |
+| `TaskQueue` (`task-queue.ts`) | [SuperAGI](https://github.com/TransformerOptimus/SuperAGI) | Priority-ordered queue with a goal decomposer; executors may enqueue follow-up tasks until the budget drains. |
 
 **Authorisation**: `dast` is marked `dangerous: true`. Only scan assets you own
 or have written permission to test. The tool will never exploit findings — it

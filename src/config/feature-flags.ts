@@ -25,7 +25,10 @@ export type FeatureName =
   | 'SAST'
   | 'DAST'
   | 'LOG_ANALYSIS'
-  | 'IDS';
+  | 'IDS'
+  | 'CONTAINER_SCAN'
+  | 'RUNTIME_MONITOR'
+  | 'ORCHESTRATION';
 
 const ALL_FEATURES: FeatureName[] = [
   'BUDDY',
@@ -44,6 +47,9 @@ const ALL_FEATURES: FeatureName[] = [
   'DAST',
   'LOG_ANALYSIS',
   'IDS',
+  'CONTAINER_SCAN',
+  'RUNTIME_MONITOR',
+  'ORCHESTRATION',
 ];
 
 export function feature(name: FeatureName): boolean {
@@ -81,6 +87,12 @@ export function feature(name: FeatureName): boolean {
       return env.DOGE_FEATURE_LOG_ANALYSIS;
     case 'IDS':
       return env.DOGE_FEATURE_IDS;
+    case 'CONTAINER_SCAN':
+      return env.DOGE_FEATURE_CONTAINER_SCAN;
+    case 'RUNTIME_MONITOR':
+      return env.DOGE_FEATURE_RUNTIME_MONITOR;
+    case 'ORCHESTRATION':
+      return env.DOGE_FEATURE_ORCHESTRATION;
     default: {
       const exhaustive: never = name;
       return exhaustive;
