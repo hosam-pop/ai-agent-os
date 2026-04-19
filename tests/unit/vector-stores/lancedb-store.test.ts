@@ -72,9 +72,10 @@ test('parseLanceDBRow converts _distance to score', () => {
   assert.deepEqual(m.payload, { k: 1 });
 });
 
-test('parseLanceDBRow handles missing distance and numeric id', () => {
+test('parseLanceDBRow handles missing distance and preserves numeric id', () => {
   const m = parseLanceDBRow({ id: 7, score: 0.5 });
-  assert.equal(m.id, '7');
+  assert.equal(m.id, 7);
+  assert.equal(typeof m.id, 'number');
   assert.equal(m.score, 0.5);
 });
 

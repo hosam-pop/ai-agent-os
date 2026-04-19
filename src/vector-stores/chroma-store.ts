@@ -1,13 +1,23 @@
 /**
  * Chroma (https://github.com/chroma-core/chroma) adapter for
- * {@link VectorStore}. Talks directly to Chroma's REST API
- * (`/api/v1/collections`, `/api/v1/collections/{name}/add`, `/query`,
- * `/delete`) rather than pulling the `chromadb` npm package.
+ * {@link VectorStore}. Targets the Chroma v2 REST API, which is scoped by
+ * tenant + database:
+ *
+ *   POST /api/v2/tenants/{tenant}/databases/{database}/collections
+ *   POST /api/v2/tenants/{tenant}/databases/{database}/collections/{id}/upsert
+ *   POST /api/v2/tenants/{tenant}/databases/{database}/collections/{id}/query
+ *   POST /api/v2/tenants/{tenant}/databases/{database}/collections/{id}/delete
+ *
+ * The Chroma team removed the v1 endpoints in the 1.x server line, so any
+ * adapter still pointing at `/api/v1/*` will get HTTP 405s from modern
+ * deployments. We default to the documented `default_tenant` /
+ * `default_database` scope but allow overriding both.
  */
 
 import {
   type VectorMatch,
   type VectorPoint,
+  type VectorPointId,
   type VectorSearchRequest,
   type VectorSearchResponse,
   type VectorStore,
@@ -27,6 +37,8 @@ export class ChromaStore implements VectorStore {
   readonly backend = 'chroma' as const;
   private readonly baseUrl: string;
   private readonly token?: string;
+  private readonly tenant: string;
+  private readonly database: string;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
   private readonly collectionIds = new Map<string, string>();
@@ -34,16 +46,18 @@ export class ChromaStore implements VectorStore {
   constructor(options: ChromaStoreOptions = {}) {
     this.baseUrl = trimSlash(options.baseUrl ?? 'http://localhost:8000');
     this.token = options.token;
+    this.tenant = options.tenant ?? 'default_tenant';
+    this.database = options.database ?? 'default_database';
     this.timeoutMs = options.timeoutMs ?? 30_000;
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
   async ensureCollection(name: string, _dim: number): Promise<VectorStoreOp> {
     if (!name) return { ok: false, error: 'collection name is required' };
-    const res = await this.request<{ id?: string; name?: string }>(`/api/v1/collections`, {
-      method: 'POST',
-      body: JSON.stringify({ name, get_or_create: true }),
-    });
+    const res = await this.request<{ id?: string; name?: string }>(
+      `${this.scopePath()}/collections`,
+      { method: 'POST', body: JSON.stringify({ name, get_or_create: true }) },
+    );
     if (!res.ok || !res.data) return { ok: false, error: res.error };
     if (typeof res.data.id === 'string') this.collectionIds.set(name, res.data.id);
     return { ok: true };
@@ -54,12 +68,12 @@ export class ChromaStore implements VectorStore {
     const id = await this.resolveCollectionId(collection);
     if (!id) return { ok: false, error: `chroma collection "${collection}" is not initialised` };
     const body = {
-      ids: points.map((p) => p.id),
+      ids: points.map((p) => String(p.id)),
       embeddings: points.map((p) => [...p.vector]),
       metadatas: points.map((p) => p.payload ?? {}),
       documents: points.map((p) => stringFromPayload(p.payload)),
     };
-    const res = await this.request(`/api/v1/collections/${id}/upsert`, {
+    const res = await this.request(`${this.scopePath()}/collections/${id}/upsert`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
@@ -68,10 +82,13 @@ export class ChromaStore implements VectorStore {
 
   async search(collection: string, request: VectorSearchRequest): Promise<VectorSearchResponse> {
     const id = await this.resolveCollectionId(collection);
-    if (!id) return { ok: false, matches: [], error: `chroma collection "${collection}" is not initialised` };
+    if (!id) {
+      return { ok: false, matches: [], error: `chroma collection "${collection}" is not initialised` };
+    }
     const body: Record<string, unknown> = {
       query_embeddings: [request.vector],
       n_results: request.limit ?? 10,
+      include: ['metadatas', 'distances', 'documents'],
     };
     if (request.filter) body.where = request.filter;
     const res = await this.request<{
@@ -79,7 +96,7 @@ export class ChromaStore implements VectorStore {
       distances?: number[][];
       metadatas?: Array<Array<Record<string, unknown> | null>>;
       documents?: string[][];
-    }>(`/api/v1/collections/${id}/query`, {
+    }>(`${this.scopePath()}/collections/${id}/query`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
@@ -88,22 +105,29 @@ export class ChromaStore implements VectorStore {
     return { ok: true, matches };
   }
 
-  async deleteByIds(collection: string, ids: readonly string[]): Promise<VectorStoreOp> {
+  async deleteByIds(
+    collection: string,
+    ids: readonly VectorPointId[],
+  ): Promise<VectorStoreOp> {
     if (ids.length === 0) return { ok: true };
     const cid = await this.resolveCollectionId(collection);
     if (!cid) return { ok: false, error: `chroma collection "${collection}" is not initialised` };
-    const res = await this.request(`/api/v1/collections/${cid}/delete`, {
+    const res = await this.request(`${this.scopePath()}/collections/${cid}/delete`, {
       method: 'POST',
-      body: JSON.stringify({ ids: [...ids] }),
+      body: JSON.stringify({ ids: ids.map((id) => String(id)) }),
     });
     return res.ok ? { ok: true } : { ok: false, error: res.error };
+  }
+
+  private scopePath(): string {
+    return `/api/v2/tenants/${encodeURIComponent(this.tenant)}/databases/${encodeURIComponent(this.database)}`;
   }
 
   private async resolveCollectionId(collection: string): Promise<string | null> {
     const cached = this.collectionIds.get(collection);
     if (cached) return cached;
     const res = await this.request<{ id?: string }>(
-      `/api/v1/collections/${encodeURIComponent(collection)}`,
+      `${this.scopePath()}/collections/${encodeURIComponent(collection)}`,
       { method: 'GET' },
     );
     if (res.ok && res.data && typeof res.data.id === 'string') {

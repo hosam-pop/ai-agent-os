@@ -7,14 +7,21 @@
  * run nearest-neighbour search with a filter, and delete by id.
  */
 
+/**
+ * A vector-store ID accepts either a string (Chroma, LanceDB) or a number
+ * (Qdrant, which requires unsigned integers or UUID strings). Adapters coerce
+ * into the shape their backend expects.
+ */
+export type VectorPointId = string | number;
+
 export interface VectorPoint {
-  readonly id: string;
+  readonly id: VectorPointId;
   readonly vector: readonly number[];
   readonly payload?: Record<string, unknown>;
 }
 
 export interface VectorMatch {
-  readonly id: string;
+  readonly id: VectorPointId;
   readonly score: number;
   readonly payload?: Record<string, unknown>;
   readonly vector?: readonly number[];
@@ -42,7 +49,7 @@ export interface VectorStore {
   ensureCollection(name: string, dim: number): Promise<VectorStoreOp>;
   upsert(collection: string, points: readonly VectorPoint[]): Promise<VectorStoreOp>;
   search(collection: string, request: VectorSearchRequest): Promise<VectorSearchResponse>;
-  deleteByIds(collection: string, ids: readonly string[]): Promise<VectorStoreOp>;
+  deleteByIds(collection: string, ids: readonly VectorPointId[]): Promise<VectorStoreOp>;
   close?(): Promise<void>;
 }
 
@@ -52,12 +59,10 @@ export function parseVectorMatch(raw: unknown, fallbackIndex = 0): VectorMatch {
     return { id: `match-${fallbackIndex}`, score: 0 };
   }
   const row = raw as Record<string, unknown>;
-  const id =
-    typeof row.id === 'string'
+  const id: VectorPointId =
+    typeof row.id === 'string' || typeof row.id === 'number'
       ? row.id
-      : typeof row.id === 'number'
-        ? String(row.id)
-        : `match-${fallbackIndex}`;
+      : `match-${fallbackIndex}`;
   const score = typeof row.score === 'number' ? row.score : typeof row.distance === 'number' ? 1 - (row.distance as number) : 0;
   const payload =
     (row.payload as Record<string, unknown> | undefined) ??

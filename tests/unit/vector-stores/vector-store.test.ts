@@ -9,9 +9,10 @@ test('parseVectorMatch extracts id, score, and payload', () => {
   assert.deepEqual(m.payload, { k: 1 });
 });
 
-test('parseVectorMatch converts numeric ids to strings', () => {
+test('parseVectorMatch preserves numeric ids verbatim', () => {
   const m = parseVectorMatch({ id: 42, score: 0.5 }, 0);
-  assert.equal(m.id, '42');
+  assert.equal(m.id, 42);
+  assert.equal(typeof m.id, 'number');
 });
 
 test('parseVectorMatch converts distance to (1 - distance) score', () => {
