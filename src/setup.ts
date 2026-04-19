@@ -32,6 +32,9 @@ import { LogAnalysisTool } from './security/log-analysis/log-analysis-tool.js';
 import { IdsTool } from './security/ids/ids-tool.js';
 import { ContainerScanTool } from './security/container/container-scan-tool.js';
 import { RuntimeMonitorTool } from './security/runtime/runtime-monitor-tool.js';
+import { LlmGuardTool } from './security/llm-guard/llm-guard-tool.js';
+import { CveLookupTool } from './security/threat-intel/cve-lookup-tool.js';
+import { AtomicLookupTool } from './security/detection-eng/atomic-lookup-tool.js';
 
 /**
  * Bootstrap: wire every subsystem into a cohesive runtime.
@@ -137,6 +140,15 @@ export async function bootstrap(): Promise<RuntimeHandles> {
   }
   if (feature('RUNTIME_MONITOR')) {
     tools.register(new RuntimeMonitorTool());
+  }
+  if (feature('LLM_GUARD')) {
+    tools.register(new LlmGuardTool());
+  }
+  if (feature('THREAT_INTEL')) {
+    tools.register(new CveLookupTool());
+  }
+  if (feature('DETECTION_ENG')) {
+    tools.register(new AtomicLookupTool());
   }
 
   const channels = new ChannelRegistry();

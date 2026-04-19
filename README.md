@@ -46,10 +46,13 @@ missing instead of crashing the agent.
 | `log-analysis/` | Threat hunting across centralised logs | [Elasticsearch / ELK](https://github.com/elastic/elasticsearch) (`_search` DSL), [Wazuh](https://github.com/wazuh/wazuh) REST API | `DOGE_FEATURE_LOG_ANALYSIS` |
 | `ids/` | Monitor network traffic for malicious activity | [Suricata](https://github.com/OISF/suricata) `eve.json` stream reader | `DOGE_FEATURE_IDS` |
 | `runtime/` | Runtime-security telemetry from Linux kernel hooks | [Falco](https://github.com/falcosecurity/falco) JSON log reader (`/var/log/falco/falco.json`) | `DOGE_FEATURE_RUNTIME_MONITOR` |
+| `llm-guard/` | Defensive scanner for LLM prompt-injection, jailbreaks, and PII in text the agent is about to process | [Vigil](https://github.com/deadbits/vigil-llm) HTTP client (`/analyze/prompt`) | `DOGE_FEATURE_LLM_GUARD` |
+| `threat-intel/` | Vulnerability lookups by CVE/GHSA id or package+ecosystem | [OSV.dev](https://osv.dev) public database (no auth required) | `DOGE_FEATURE_THREAT_INTEL` |
+| `detection-eng/` | Read-only index of [Atomic Red Team](https://github.com/redcanaryco/atomic-red-team) YAML definitions so SIEM / detection engineers can see which command patterns to alert on | Local YAML walker (never executes any atomic test) | `DOGE_FEATURE_DETECTION_ENG` |
 
 Each family exposes a single unified tool to the agent (`sast`, `dast`,
-`container_scan`, `log_analysis`, `ids`, `runtime_monitor`) that selects the
-concrete engine at call time. Parsers are pure functions — the heavy lifting
+`container_scan`, `log_analysis`, `ids`, `runtime_monitor`, `llm_guard`,
+`cve_lookup`, `atomic_lookup`) that selects the concrete engine at call time. Parsers are pure functions — the heavy lifting
 (process execution, HTTP, streaming files) is isolated in the runners /
 clients so the parsing logic is easy to unit-test without touching the
 network or any external binary.

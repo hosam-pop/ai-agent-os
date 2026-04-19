@@ -28,7 +28,10 @@ export type FeatureName =
   | 'IDS'
   | 'CONTAINER_SCAN'
   | 'RUNTIME_MONITOR'
-  | 'ORCHESTRATION';
+  | 'ORCHESTRATION'
+  | 'LLM_GUARD'
+  | 'THREAT_INTEL'
+  | 'DETECTION_ENG';
 
 const ALL_FEATURES: FeatureName[] = [
   'BUDDY',
@@ -50,6 +53,9 @@ const ALL_FEATURES: FeatureName[] = [
   'CONTAINER_SCAN',
   'RUNTIME_MONITOR',
   'ORCHESTRATION',
+  'LLM_GUARD',
+  'THREAT_INTEL',
+  'DETECTION_ENG',
 ];
 
 export function feature(name: FeatureName): boolean {
@@ -93,6 +99,12 @@ export function feature(name: FeatureName): boolean {
       return env.DOGE_FEATURE_RUNTIME_MONITOR;
     case 'ORCHESTRATION':
       return env.DOGE_FEATURE_ORCHESTRATION;
+    case 'LLM_GUARD':
+      return env.DOGE_FEATURE_LLM_GUARD;
+    case 'THREAT_INTEL':
+      return env.DOGE_FEATURE_THREAT_INTEL;
+    case 'DETECTION_ENG':
+      return env.DOGE_FEATURE_DETECTION_ENG;
     default: {
       const exhaustive: never = name;
       return exhaustive;
