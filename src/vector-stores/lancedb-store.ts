@@ -15,6 +15,7 @@
 import {
   type VectorMatch,
   type VectorPoint,
+  type VectorPointId,
   type VectorSearchRequest,
   type VectorSearchResponse,
   type VectorStore,
@@ -102,7 +103,7 @@ export class LanceDBStore implements VectorStore {
     const table = await this.getTable(collection);
     if (!table.ok || !table.table) return { ok: false, error: table.error };
     const rows: LanceDBRow[] = points.map((p) => ({
-      id: p.id,
+      id: String(p.id),
       vector: [...p.vector],
       payload: p.payload,
       text: typeof p.payload?.text === 'string' ? (p.payload.text as string) : undefined,
@@ -133,12 +134,17 @@ export class LanceDBStore implements VectorStore {
     }
   }
 
-  async deleteByIds(collection: string, ids: readonly string[]): Promise<VectorStoreOp> {
+  async deleteByIds(
+    collection: string,
+    ids: readonly VectorPointId[],
+  ): Promise<VectorStoreOp> {
     if (ids.length === 0) return { ok: true };
     const table = await this.getTable(collection);
     if (!table.ok || !table.table) return { ok: false, error: table.error };
     try {
-      const quoted = ids.map((id) => `'${id.replace(/'/g, "''")}'`).join(', ');
+      const quoted = ids
+        .map((id) => `'${String(id).replace(/'/g, "''")}'`)
+        .join(', ');
       await table.table.delete(`id IN (${quoted})`);
       return { ok: true };
     } catch (err) {
@@ -175,8 +181,8 @@ export class LanceDBStore implements VectorStore {
 }
 
 export function parseLanceDBRow(raw: Record<string, unknown>): VectorMatch {
-  const id =
-    typeof raw.id === 'string' ? raw.id : typeof raw.id === 'number' ? String(raw.id) : 'unknown';
+  const id: VectorPointId =
+    typeof raw.id === 'string' || typeof raw.id === 'number' ? raw.id : 'unknown';
   const distance = typeof raw._distance === 'number' ? (raw._distance as number) : undefined;
   const score =
     distance !== undefined

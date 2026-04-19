@@ -10,6 +10,7 @@
 import {
   type VectorMatch,
   type VectorPoint,
+  type VectorPointId,
   type VectorSearchRequest,
   type VectorSearchResponse,
   type VectorStore,
@@ -43,11 +44,28 @@ export class QdrantStore implements VectorStore {
 
   async ensureCollection(name: string, dim: number): Promise<VectorStoreOp> {
     if (!name) return { ok: false, error: 'collection name is required' };
+    // Qdrant's PUT /collections/{name} is create-only and returns 409 on
+    // re-creation, so we probe first. This keeps ensureCollection idempotent
+    // across repeated invocations and agent restarts.
+    const exists = await this.request<{ result?: { exists?: boolean } }>(
+      `/collections/${encodeURIComponent(name)}/exists`,
+      { method: 'GET' },
+    );
+    if (exists.ok && exists.data?.result?.exists === true) {
+      return { ok: true };
+    }
     const res = await this.request(`/collections/${encodeURIComponent(name)}`, {
       method: 'PUT',
       body: JSON.stringify({ vectors: { size: dim, distance: this.distance } }),
     });
-    return res.ok ? { ok: true } : { ok: false, error: res.error };
+    if (res.ok) return { ok: true };
+    // Fall back for older Qdrant builds without `/exists` that raced another
+    // client: a 409 here still means the collection is present, which is what
+    // the caller asked for.
+    if (res.error && res.error.startsWith('qdrant 409')) {
+      return { ok: true };
+    }
+    return { ok: false, error: res.error };
   }
 
   async upsert(collection: string, points: readonly VectorPoint[]): Promise<VectorStoreOp> {
@@ -79,7 +97,10 @@ export class QdrantStore implements VectorStore {
     return { ok: true, matches };
   }
 
-  async deleteByIds(collection: string, ids: readonly string[]): Promise<VectorStoreOp> {
+  async deleteByIds(
+    collection: string,
+    ids: readonly VectorPointId[],
+  ): Promise<VectorStoreOp> {
     if (ids.length === 0) return { ok: true };
     const res = await this.request(
       `/collections/${encodeURIComponent(collection)}/points/delete?wait=true`,

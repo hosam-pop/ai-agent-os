@@ -11,7 +11,7 @@ import { loadEnv } from '../config/env-loader.js';
 import { ChromaStore } from './chroma-store.js';
 import { LanceDBStore } from './lancedb-store.js';
 import { QdrantStore } from './qdrant-store.js';
-import type { VectorPoint, VectorStore } from './vector-store.js';
+import type { VectorPoint, VectorPointId, VectorStore } from './vector-store.js';
 
 export type VectorBackend = 'qdrant' | 'chroma' | 'lancedb';
 export type VectorAction = 'ensure' | 'upsert' | 'search' | 'delete';
@@ -25,11 +25,19 @@ export interface VectorStoreInput {
   readonly vector?: readonly number[];
   readonly limit?: number;
   readonly filter?: Record<string, unknown>;
-  readonly ids?: readonly string[];
+  readonly ids?: readonly VectorPointId[];
 }
 
+/**
+ * Qdrant requires point IDs to be unsigned integers or UUID strings; Chroma
+ * and LanceDB accept arbitrary strings. The unified schema therefore accepts
+ * either a non-empty string or a non-negative integer and lets each adapter
+ * coerce as appropriate.
+ */
+const VectorPointIdSchema = z.union([z.string().min(1), z.number().int().nonnegative()]);
+
 const VectorPointSchema: z.ZodType<VectorPoint> = z.object({
-  id: z.string().min(1),
+  id: VectorPointIdSchema,
   vector: z.array(z.number()).min(1),
   payload: z.record(z.unknown()).optional(),
 });
@@ -43,7 +51,7 @@ const VectorStoreSchema: z.ZodType<VectorStoreInput> = z.object({
   vector: z.array(z.number()).min(1).optional(),
   limit: z.number().int().positive().max(1000).optional(),
   filter: z.record(z.unknown()).optional(),
-  ids: z.array(z.string().min(1)).optional(),
+  ids: z.array(VectorPointIdSchema).optional(),
 });
 
 export class VectorStoreTool implements Tool<VectorStoreInput> {
@@ -63,7 +71,7 @@ export class VectorStoreTool implements Tool<VectorStoreInput> {
         items: {
           type: 'object',
           properties: {
-            id: { type: 'string' },
+            id: { type: ['string', 'integer'] },
             vector: { type: 'array', items: { type: 'number' } },
             payload: { type: 'object', additionalProperties: true },
           },
@@ -73,7 +81,7 @@ export class VectorStoreTool implements Tool<VectorStoreInput> {
       vector: { type: 'array', items: { type: 'number' } },
       limit: { type: 'number' },
       filter: { type: 'object', additionalProperties: true },
-      ids: { type: 'array', items: { type: 'string' } },
+      ids: { type: 'array', items: { type: ['string', 'integer'] } },
     },
     required: ['action', 'collection'],
     additionalProperties: false,
