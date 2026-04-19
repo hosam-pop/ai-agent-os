@@ -215,6 +215,28 @@ npm run build       # required once, because tests import the compiled dist
 npm test
 ```
 
+## End-to-end security smoke demo
+
+`npm run demo:security` exercises a four-stage defensive workflow that
+touches the vector store, the log-parsing layer, the correlation step, and
+the container scanner. It seeds three real attack signatures (Log4Shell,
+SSH brute-force, sudo privilege escalation) into a Chroma collection, parses
+a sample syslog feed, correlates every suspicious event back to its
+signature via cosine similarity, and then runs Grype against a public
+container image. The run writes `cybersecurity-demo-report.md` in the
+current working directory. A sample report is committed at
+[`docs/cybersecurity-demo-report.md`](docs/cybersecurity-demo-report.md).
+
+```bash
+CHROMA_URL=http://localhost:8000 \
+DOGE_DEMO_IMAGE=alpine:3.14 \
+npm run demo:security
+```
+
+Chroma and Grype are optional. Missing components are recorded as warnings
+in the report, and the correlation stage falls back to an in-memory
+cosine search so the run always produces a concrete artefact.
+
 ## Integrated components
 
 | From | Component | Where it lives |

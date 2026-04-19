@@ -21,6 +21,7 @@
     "test": "npm run build && node --test --experimental-strip-types tests/unit/*.test.ts tests/unit/**/*.test.ts tests/integration/*.test.ts",
     "test:unit": "npm run build && node --test --experimental-strip-types tests/unit/*.test.ts tests/unit/**/*.test.ts",
     "test:integration": "npm run build && node --test --experimental-strip-types tests/integration/*.test.ts",
+    "demo:security": "npm run build && node ./dist/demos/run-security-demo.js",
     "docker:build": "docker build -f docker/Dockerfile -t ai-agent-os:latest .",
     "docker:run": "docker compose -f docker/docker-compose.yml up --build"
   },
