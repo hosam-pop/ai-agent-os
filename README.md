@@ -13,6 +13,24 @@ orchestrator, plugin hooks, a permission engine, and an interactive Ink TUI.
 The experimental Claude-Code modules — BUDDY, KAIROS, ULTRAPLAN, COORDINATOR,
 BRIDGE — are included behind feature flags.
 
+On top of that base, **Ultimate Integrations** add an in-conversation AdminTool
+and seven opt-in integration slots under `src/integrations/`:
+
+| Slot | What you get | Feature flag |
+| --- | --- | --- |
+| `browser/` | Playwright-based `BrowserTool` (navigate, click, type, extract, screenshot) | `DOGE_FEATURE_BROWSER` |
+| `mem0/` | Semantic long-term memory via the [mem0ai](https://github.com/mem0ai/mem0) SDK, with local fallback | `DOGE_FEATURE_MEM0` |
+| `mcp/` | Generic MCP client (connects to [ultimate_mcp_server](https://github.com/Dicklesworthstone/ultimate_mcp_server), [0nMCP](https://github.com/0nork/0nMCP), or any other MCP server over stdio/HTTP) | `DOGE_FEATURE_MCP` |
+| `social/` | Twitter / LinkedIn / Slack / Calendar tool wrappers that delegate to the MCP server | `DOGE_FEATURE_SOCIAL` |
+| `router/` | Multi-provider router (failover / round-robin / weighted / least-recent) across any mix of Anthropic, OpenAI, and OpenAI-compatible endpoints | `DOGE_FEATURE_ROUTER` |
+| `openclaw/` | Channel adapters inspired by [openclaw](https://github.com/openclaw/openclaw): pluggable base + concrete Telegram long-poll and Slack Events/webhook adapters | `DOGE_FEATURE_SOCIAL` |
+| `local-llm/` | [Octoroute](https://github.com/slb350/octoroute)-style preset pointing the OpenAI provider at a local Ollama / LM Studio gateway | `DOGE_FEATURE_OCTOROUTE` |
+
+The `admin` tool (on by default via `DOGE_FEATURE_ADMIN=true`) lets the agent
+switch providers, change the default model, toggle feature gates, and add API
+keys from inside a conversation — it writes the `.env` and hot-reloads the
+provider cache without a restart.
+
 ## Requirements
 
 - Node.js **≥ 20**
@@ -70,6 +88,8 @@ See [`.env.example`](./.env.example) for the full list. Highlights:
 - `DOGE_PERMISSION_MODE` — `strict` | `default` | `permissive`
 - `DOGE_ALLOW_NETWORK`, `DOGE_ALLOW_WRITES` — hard switches for the web/file tools
 - `DOGE_FEATURE_BUDDY`, `DOGE_FEATURE_KAIROS`, `DOGE_FEATURE_ULTRAPLAN`, `DOGE_FEATURE_COORDINATOR`, `DOGE_FEATURE_BRIDGE` — experimental modules
+- `DOGE_FEATURE_ADMIN`, `DOGE_FEATURE_BROWSER`, `DOGE_FEATURE_MEM0`, `DOGE_FEATURE_MCP`, `DOGE_FEATURE_ROUTER`, `DOGE_FEATURE_SOCIAL`, `DOGE_FEATURE_OCTOROUTE` — Ultimate Integrations
+- `MEM0_API_KEY`, `MCP_SERVER_URL` / `MCP_SERVER_STDIO`, `DOGE_ROUTER_CONFIG`, `OCTOROUTE_URL`, `TELEGRAM_BOT_TOKEN`, `SLACK_BOT_TOKEN` / `SLACK_WEBHOOK_URL` — integration credentials (all optional, every integration fails soft when its key is missing)
 
 ## Docker
 
@@ -95,7 +115,7 @@ src/
   core/            agent-loop, planner, executor, orchestrator
   api/             provider-interface + anthropic/openai/factory
   memory/          short-term, long-term, summarizer
-  tools/           registry, bash, file, web, sandbox
+  tools/           registry, bash, file, web, sandbox, admin
   tasks/           decomposition, dependency-graph
   agents/          sub-agent-manager, communication bus
   cli/             commander CLI + Ink TUI
@@ -105,6 +125,7 @@ src/
   utils/           logger, debug/tracing
   config/          env-loader, paths (~/.doge by default), feature-flags
   features/        BUDDY, KAIROS, ULTRAPLAN, COORDINATOR, BRIDGE (gated)
+  integrations/    browser, mem0, mcp, social, router, openclaw, local-llm
 tests/
   unit/            unit tests
   integration/     integration tests

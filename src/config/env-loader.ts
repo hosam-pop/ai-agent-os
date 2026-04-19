@@ -4,7 +4,9 @@ import { resolve } from 'node:path';
 import { z } from 'zod';
 
 const EnvSchema = z.object({
-  DOGE_PROVIDER: z.enum(['anthropic', 'openai', 'custom']).default('anthropic'),
+  DOGE_PROVIDER: z
+    .enum(['anthropic', 'openai', 'custom', 'router', 'octoroute'])
+    .default('anthropic'),
   DOGE_MODEL: z.string().default('claude-3-5-sonnet-latest'),
 
   ANTHROPIC_API_KEY: z.string().optional(),
@@ -32,6 +34,42 @@ const EnvSchema = z.object({
   DOGE_FEATURE_COORDINATOR: z.coerce.boolean().default(false),
   DOGE_FEATURE_BRIDGE: z.coerce.boolean().default(false),
 
+  DOGE_FEATURE_ADMIN: z.coerce.boolean().default(true),
+  DOGE_FEATURE_BROWSER: z.coerce.boolean().default(false),
+  DOGE_FEATURE_MEM0: z.coerce.boolean().default(false),
+  DOGE_FEATURE_MCP: z.coerce.boolean().default(false),
+  DOGE_FEATURE_ROUTER: z.coerce.boolean().default(false),
+  DOGE_FEATURE_SOCIAL: z.coerce.boolean().default(false),
+  DOGE_FEATURE_OCTOROUTE: z.coerce.boolean().default(false),
+
+  MEM0_API_KEY: z.string().optional(),
+  MEM0_ORG_ID: z.string().optional(),
+  MEM0_PROJECT_ID: z.string().optional(),
+  MEM0_USER_ID: z.string().default('ai-agent-os-default'),
+
+  MCP_SERVER_URL: z.string().optional(),
+  MCP_SERVER_TOKEN: z.string().optional(),
+  MCP_SERVER_STDIO: z.string().optional(),
+
+  DOGE_ROUTER_CONFIG: z.string().optional(),
+  DOGE_ROUTER_STRATEGY: z
+    .enum(['failover', 'round-robin', 'weighted', 'least-recent'])
+    .default('failover'),
+
+  OCTOROUTE_URL: z.string().optional(),
+  OCTOROUTE_API_KEY: z.string().optional(),
+  OCTOROUTE_MODEL: z.string().default('gpt-4o-mini'),
+
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  SLACK_BOT_TOKEN: z.string().optional(),
+  SLACK_WEBHOOK_URL: z.string().url().optional(),
+  SLACK_SIGNING_SECRET: z.string().optional(),
+
+  BROWSER_HEADLESS: z.coerce.boolean().default(true),
+  BROWSER_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  BROWSER_EXECUTABLE_PATH: z.string().optional(),
+
   DOGE_MAX_ITERATIONS: z.coerce.number().int().positive().default(25),
   DOGE_MAX_PARALLEL_TASKS: z.coerce.number().int().positive().default(4),
   DOGE_CONTEXT_TOKEN_BUDGET: z.coerce.number().int().positive().default(120_000),
@@ -46,7 +84,7 @@ export function loadEnv(opts: { path?: string; force?: boolean } = {}): AppEnv {
 
   const candidate = opts.path ?? resolve(process.cwd(), '.env');
   if (existsSync(candidate)) {
-    loadDotenv({ path: candidate, override: false });
+    loadDotenv({ path: candidate, override: opts.force === true });
   }
 
   const parsed = EnvSchema.safeParse(process.env);
