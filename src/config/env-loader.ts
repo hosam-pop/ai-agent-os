@@ -49,6 +49,9 @@ const EnvSchema = z.object({
   DOGE_FEATURE_CONTAINER_SCAN: z.coerce.boolean().default(false),
   DOGE_FEATURE_RUNTIME_MONITOR: z.coerce.boolean().default(false),
   DOGE_FEATURE_ORCHESTRATION: z.coerce.boolean().default(false),
+  DOGE_FEATURE_LLM_GUARD: z.coerce.boolean().default(false),
+  DOGE_FEATURE_THREAT_INTEL: z.coerce.boolean().default(false),
+  DOGE_FEATURE_DETECTION_ENG: z.coerce.boolean().default(false),
 
   MEM0_API_KEY: z.string().optional(),
   MEM0_ORG_ID: z.string().optional(),
@@ -102,6 +105,13 @@ const EnvSchema = z.object({
   WAZUH_TOKEN: z.string().optional(),
 
   SURICATA_EVE_PATH: z.string().optional(),
+
+  VIGIL_URL: z.string().url().optional(),
+  VIGIL_TOKEN: z.string().optional(),
+
+  OSV_URL: z.string().url().optional(),
+
+  ATOMIC_RED_TEAM_PATH: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;

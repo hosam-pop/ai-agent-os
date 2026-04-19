@@ -33,3 +33,38 @@ export type { TrivyRunOptions, TrivyMode } from './container/trivy-runner.js';
 export { RuntimeMonitorTool } from './runtime/runtime-monitor-tool.js';
 export { readFalcoEvents } from './runtime/falco-event-reader.js';
 export type { FalcoEvent, FalcoSummary, FalcoReadOptions, FalcoPriority } from './runtime/falco-event-reader.js';
+
+export { LlmGuardTool } from './llm-guard/llm-guard-tool.js';
+export { VigilClient, parseVigilResponse } from './llm-guard/vigil-client.js';
+export type {
+  VigilClientOptions,
+  VigilScanRequest,
+  VigilScanSummary,
+  VigilMatch,
+  VigilVerdict,
+} from './llm-guard/vigil-client.js';
+
+export { CveLookupTool } from './threat-intel/cve-lookup-tool.js';
+export { OsvClient, parseOsvQuery, parseOsvVulnerability } from './threat-intel/osv-client.js';
+export type {
+  OsvVulnerability,
+  OsvQuerySummary,
+  OsvQueryRequest,
+  OsvClientOptions,
+  Ecosystem,
+} from './threat-intel/osv-client.js';
+
+export { AtomicLookupTool } from './detection-eng/atomic-lookup-tool.js';
+export {
+  parseAtomicTechniqueYaml,
+  filterAtomicTechniques,
+  scanAtomicRedTeam,
+} from './detection-eng/atomic-red-team-reader.js';
+export type {
+  AtomicExecutor,
+  AtomicTest,
+  AtomicTechnique,
+  AtomicSummary,
+  AtomicScanOptions,
+  AtomicPlatform,
+} from './detection-eng/atomic-red-team-reader.js';
