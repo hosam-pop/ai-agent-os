@@ -21,7 +21,11 @@ export type FeatureName =
   | 'MCP'
   | 'ROUTER'
   | 'SOCIAL'
-  | 'OCTOROUTE';
+  | 'OCTOROUTE'
+  | 'SAST'
+  | 'DAST'
+  | 'LOG_ANALYSIS'
+  | 'IDS';
 
 const ALL_FEATURES: FeatureName[] = [
   'BUDDY',
@@ -36,6 +40,10 @@ const ALL_FEATURES: FeatureName[] = [
   'ROUTER',
   'SOCIAL',
   'OCTOROUTE',
+  'SAST',
+  'DAST',
+  'LOG_ANALYSIS',
+  'IDS',
 ];
 
 export function feature(name: FeatureName): boolean {
@@ -65,6 +73,14 @@ export function feature(name: FeatureName): boolean {
       return env.DOGE_FEATURE_SOCIAL;
     case 'OCTOROUTE':
       return env.DOGE_FEATURE_OCTOROUTE;
+    case 'SAST':
+      return env.DOGE_FEATURE_SAST;
+    case 'DAST':
+      return env.DOGE_FEATURE_DAST;
+    case 'LOG_ANALYSIS':
+      return env.DOGE_FEATURE_LOG_ANALYSIS;
+    case 'IDS':
+      return env.DOGE_FEATURE_IDS;
     default: {
       const exhaustive: never = name;
       return exhaustive;

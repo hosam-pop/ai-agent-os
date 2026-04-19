@@ -42,6 +42,11 @@ const EnvSchema = z.object({
   DOGE_FEATURE_SOCIAL: z.coerce.boolean().default(false),
   DOGE_FEATURE_OCTOROUTE: z.coerce.boolean().default(false),
 
+  DOGE_FEATURE_SAST: z.coerce.boolean().default(false),
+  DOGE_FEATURE_DAST: z.coerce.boolean().default(false),
+  DOGE_FEATURE_LOG_ANALYSIS: z.coerce.boolean().default(false),
+  DOGE_FEATURE_IDS: z.coerce.boolean().default(false),
+
   MEM0_API_KEY: z.string().optional(),
   MEM0_ORG_ID: z.string().optional(),
   MEM0_PROJECT_ID: z.string().optional(),
@@ -73,6 +78,23 @@ const EnvSchema = z.object({
   DOGE_MAX_ITERATIONS: z.coerce.number().int().positive().default(25),
   DOGE_MAX_PARALLEL_TASKS: z.coerce.number().int().positive().default(4),
   DOGE_CONTEXT_TOKEN_BUDGET: z.coerce.number().int().positive().default(120_000),
+
+  SEMGREP_BIN: z.string().optional(),
+  CODEQL_BIN: z.string().optional(),
+  NUCLEI_BIN: z.string().optional(),
+  ZAP_BIN: z.string().optional(),
+
+  ELASTIC_URL: z.string().url().optional(),
+  ELASTIC_API_KEY: z.string().optional(),
+  ELASTIC_USERNAME: z.string().optional(),
+  ELASTIC_PASSWORD: z.string().optional(),
+
+  WAZUH_URL: z.string().url().optional(),
+  WAZUH_USERNAME: z.string().optional(),
+  WAZUH_PASSWORD: z.string().optional(),
+  WAZUH_TOKEN: z.string().optional(),
+
+  SURICATA_EVE_PATH: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;
