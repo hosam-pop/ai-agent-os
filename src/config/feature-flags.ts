@@ -31,7 +31,16 @@ export type FeatureName =
   | 'ORCHESTRATION'
   | 'LLM_GUARD'
   | 'THREAT_INTEL'
-  | 'DETECTION_ENG';
+  | 'DETECTION_ENG'
+  | 'MCP_GATEWAY'
+  | 'LETTA'
+  | 'ZEP'
+  | 'VECTOR_STORES'
+  | 'RAG'
+  | 'SKILL_PLANNER'
+  | 'STAGEHAND'
+  | 'CODEQL_MCP'
+  | 'SEMGREP_MCP';
 
 const ALL_FEATURES: FeatureName[] = [
   'BUDDY',
@@ -56,6 +65,15 @@ const ALL_FEATURES: FeatureName[] = [
   'LLM_GUARD',
   'THREAT_INTEL',
   'DETECTION_ENG',
+  'MCP_GATEWAY',
+  'LETTA',
+  'ZEP',
+  'VECTOR_STORES',
+  'RAG',
+  'SKILL_PLANNER',
+  'STAGEHAND',
+  'CODEQL_MCP',
+  'SEMGREP_MCP',
 ];
 
 export function feature(name: FeatureName): boolean {
@@ -105,6 +123,24 @@ export function feature(name: FeatureName): boolean {
       return env.DOGE_FEATURE_THREAT_INTEL;
     case 'DETECTION_ENG':
       return env.DOGE_FEATURE_DETECTION_ENG;
+    case 'MCP_GATEWAY':
+      return env.DOGE_FEATURE_MCP_GATEWAY;
+    case 'LETTA':
+      return env.DOGE_FEATURE_LETTA;
+    case 'ZEP':
+      return env.DOGE_FEATURE_ZEP;
+    case 'VECTOR_STORES':
+      return env.DOGE_FEATURE_VECTOR_STORES;
+    case 'RAG':
+      return env.DOGE_FEATURE_RAG;
+    case 'SKILL_PLANNER':
+      return env.DOGE_FEATURE_SKILL_PLANNER;
+    case 'STAGEHAND':
+      return env.DOGE_FEATURE_STAGEHAND;
+    case 'CODEQL_MCP':
+      return env.DOGE_FEATURE_CODEQL_MCP;
+    case 'SEMGREP_MCP':
+      return env.DOGE_FEATURE_SEMGREP_MCP;
     default: {
       const exhaustive: never = name;
       return exhaustive;

@@ -75,6 +75,30 @@ signal they are in use and import them directly from `src/orchestration/`.
 or have written permission to test. The tool will never exploit findings — it
 reports them for a human or another defensive tool to triage.
 
+## Advanced weapons (`src/integrations/mcp/`, `src/memory/`, `src/rag/`, `src/orchestration/`, `src/vector-stores/`, `src/integrations/browser/`)
+
+A second defensive / productivity tier built on top of PR #1–#5. Every module
+is opt-in via its own feature flag, soft-fails when its dependency is missing,
+and is unit-tested with injected `fetch` / module loaders so the build never
+forces native binaries or a live service.
+
+| Module | Purpose | Implementation | Feature flag |
+| --- | --- | --- | --- |
+| `integrations/mcp/mcp-gateway.ts` | Policy wrapper around `MCPClient` merging [Lasso MCP Gateway](https://github.com/lasso-security/mcp-gateway) + [Guardian-MCP](https://github.com/Nikdroid-sys/guardian-system) ideas: tool allowlist/denylist, per-tool rate limiting, optional response scanning with `VigilClient` | Native TS (routes `listTools` / `callTool` / `close` through policy gate) | `DOGE_FEATURE_MCP_GATEWAY` |
+| `memory/letta/` | [Letta](https://github.com/letta-ai/letta) (formerly MemGPT) archival-memory adapter matching the `Mem0Adapter` interface | HTTP client against `/v1/agents/{id}/archival-memory` | `DOGE_FEATURE_LETTA` |
+| `memory/zep/` | [Zep](https://github.com/getzep/zep) long-term conversational memory adapter matching the `Mem0Adapter` interface | HTTP client against `/api/v2/sessions/{id}/memory` | `DOGE_FEATURE_ZEP` |
+| `vector-stores/` | Unified `VectorStore` interface plus adapters for [Qdrant](https://github.com/qdrant/qdrant) (REST), [Chroma](https://github.com/chroma-core/chroma) (REST), and [LanceDB](https://github.com/lancedb/lancedb) (native package via dynamic import) — exposed to the agent as a single `vector_store` tool | Backend selected per call via `backend` arg or `VECTOR_STORE_BACKEND` env | `DOGE_FEATURE_VECTOR_STORES` |
+| `rag/` | [LlamaIndex](https://github.com/run-llama/LlamaIndexTS)-backed RAG engine (index / query / answer) and matching `rag` tool | `llamaindex` loaded via dynamic import so the build never requires it | `DOGE_FEATURE_RAG` |
+| `orchestration/skill-planner.ts` | [Semantic Kernel](https://github.com/microsoft/semantic-kernel)-style goal → skill-selection → plan → execute loop, ported to native TypeScript | Pluggable `SkillResolver` (default: deterministic keyword matcher; swap in an LLM-backed one at construction) | `DOGE_FEATURE_SKILL_PLANNER` |
+| `integrations/browser/stagehand-tool.ts` | Second browser engine alongside `browser-use` based on [Stagehand](https://github.com/browserbase/stagehand) (Playwright + LLM), with `navigate` / `act` / `extract` / `observe` primitives | `@browserbasehq/stagehand` loaded via dynamic import | `DOGE_FEATURE_STAGEHAND` |
+| `integrations/mcp/` (external servers) | Connect the existing `MCPClient` to [CodeQL-MCP](https://github.com/JordyZomer/codeql-mcp) and [Semgrep-MCP](https://github.com/VetCoders/mcp-server-semgrep) servers as two additional `mcp` tools, so the agent can drive CodeQL and Semgrep as structured MCP commands instead of shelling out | Wraps the same `MCPClient` type via `CODEQL_MCP_URL` / `SEMGREP_MCP_URL` (or stdio paths) | `DOGE_FEATURE_CODEQL_MCP`, `DOGE_FEATURE_SEMGREP_MCP` |
+
+All keys and URLs live in `.env.example`; every adapter returns a clean
+`{ ok: false, error }` when its service is unreachable so the agent keeps
+running. None of these modules pulls in a heavy native binary at build time —
+LanceDB, LlamaIndex, and Stagehand are only imported when the feature is both
+enabled and actually invoked.
+
 ## Requirements
 
 - Node.js **≥ 20**

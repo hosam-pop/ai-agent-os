@@ -53,6 +53,46 @@ const EnvSchema = z.object({
   DOGE_FEATURE_THREAT_INTEL: z.coerce.boolean().default(false),
   DOGE_FEATURE_DETECTION_ENG: z.coerce.boolean().default(false),
 
+  DOGE_FEATURE_MCP_GATEWAY: z.coerce.boolean().default(false),
+  DOGE_FEATURE_LETTA: z.coerce.boolean().default(false),
+  DOGE_FEATURE_ZEP: z.coerce.boolean().default(false),
+  DOGE_FEATURE_VECTOR_STORES: z.coerce.boolean().default(false),
+  DOGE_FEATURE_RAG: z.coerce.boolean().default(false),
+  DOGE_FEATURE_SKILL_PLANNER: z.coerce.boolean().default(false),
+  DOGE_FEATURE_STAGEHAND: z.coerce.boolean().default(false),
+  DOGE_FEATURE_CODEQL_MCP: z.coerce.boolean().default(false),
+  DOGE_FEATURE_SEMGREP_MCP: z.coerce.boolean().default(false),
+
+  MCP_GATEWAY_ALLOW_TOOLS: z.string().optional(),
+  MCP_GATEWAY_DENY_TOOLS: z.string().optional(),
+  MCP_GATEWAY_RATE_LIMIT: z.coerce.number().int().positive().optional(),
+  MCP_GATEWAY_WINDOW_MS: z.coerce.number().int().positive().optional(),
+  MCP_GATEWAY_SCAN_RESPONSES: z.coerce.boolean().default(false),
+
+  LETTA_URL: z.string().url().optional(),
+  LETTA_TOKEN: z.string().optional(),
+  LETTA_AGENT_ID: z.string().optional(),
+
+  ZEP_URL: z.string().url().optional(),
+  ZEP_API_KEY: z.string().optional(),
+  ZEP_SESSION_ID: z.string().optional(),
+
+  VECTOR_STORE_BACKEND: z.enum(['qdrant', 'chroma', 'lancedb']).optional(),
+  QDRANT_URL: z.string().url().optional(),
+  QDRANT_API_KEY: z.string().optional(),
+  CHROMA_URL: z.string().url().optional(),
+  CHROMA_TOKEN: z.string().optional(),
+  LANCEDB_URI: z.string().optional(),
+
+  BROWSERBASE_API_KEY: z.string().optional(),
+  BROWSERBASE_PROJECT_ID: z.string().optional(),
+  STAGEHAND_MODEL_NAME: z.string().optional(),
+
+  CODEQL_MCP_URL: z.string().url().optional(),
+  CODEQL_MCP_STDIO: z.string().optional(),
+  SEMGREP_MCP_URL: z.string().url().optional(),
+  SEMGREP_MCP_STDIO: z.string().optional(),
+
   MEM0_API_KEY: z.string().optional(),
   MEM0_ORG_ID: z.string().optional(),
   MEM0_PROJECT_ID: z.string().optional(),
