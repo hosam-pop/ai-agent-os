@@ -20,3 +20,16 @@ export type { WazuhClientOptions, WazuhAlert, WazuhSummary } from './log-analysi
 
 export { readSuricataEve } from './ids/suricata-eve-reader.js';
 export type { SuricataAlert, SuricataSummary, SuricataReadOptions } from './ids/suricata-eve-reader.js';
+
+export { runBearer, parseBearerJson } from './sast/bearer-runner.js';
+export type { BearerFinding, BearerSummary, BearerRunOptions } from './sast/bearer-runner.js';
+
+export { ContainerScanTool } from './container/container-scan-tool.js';
+export { runGrype, parseGrypeJson } from './container/grype-runner.js';
+export type { ContainerVuln, ContainerScanSummary, GrypeRunOptions } from './container/grype-runner.js';
+export { runTrivy, parseTrivyJson } from './container/trivy-runner.js';
+export type { TrivyRunOptions, TrivyMode } from './container/trivy-runner.js';
+
+export { RuntimeMonitorTool } from './runtime/runtime-monitor-tool.js';
+export { readFalcoEvents } from './runtime/falco-event-reader.js';
+export type { FalcoEvent, FalcoSummary, FalcoReadOptions, FalcoPriority } from './runtime/falco-event-reader.js';

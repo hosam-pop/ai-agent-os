@@ -30,6 +30,8 @@ import { SastTool } from './security/sast/sast-tool.js';
 import { DastTool } from './security/dast/dast-tool.js';
 import { LogAnalysisTool } from './security/log-analysis/log-analysis-tool.js';
 import { IdsTool } from './security/ids/ids-tool.js';
+import { ContainerScanTool } from './security/container/container-scan-tool.js';
+import { RuntimeMonitorTool } from './security/runtime/runtime-monitor-tool.js';
 
 /**
  * Bootstrap: wire every subsystem into a cohesive runtime.
@@ -129,6 +131,12 @@ export async function bootstrap(): Promise<RuntimeHandles> {
   }
   if (feature('IDS')) {
     tools.register(new IdsTool());
+  }
+  if (feature('CONTAINER_SCAN')) {
+    tools.register(new ContainerScanTool());
+  }
+  if (feature('RUNTIME_MONITOR')) {
+    tools.register(new RuntimeMonitorTool());
   }
 
   const channels = new ChannelRegistry();
