@@ -33,8 +33,16 @@ import { IdsTool } from './security/ids/ids-tool.js';
 import { ContainerScanTool } from './security/container/container-scan-tool.js';
 import { RuntimeMonitorTool } from './security/runtime/runtime-monitor-tool.js';
 import { LlmGuardTool } from './security/llm-guard/llm-guard-tool.js';
+import { VigilClient } from './security/llm-guard/vigil-client.js';
 import { CveLookupTool } from './security/threat-intel/cve-lookup-tool.js';
 import { AtomicLookupTool } from './security/detection-eng/atomic-lookup-tool.js';
+import { buildGatedMCPClient, type GatedMCPClient } from './integrations/mcp/mcp-gateway.js';
+import { createLettaMemory } from './memory/letta/letta-memory.js';
+import { createZepMemory } from './memory/zep/zep-memory.js';
+import { VectorStoreTool } from './vector-stores/vector-store-tool.js';
+import { RagTool } from './rag/rag-tool.js';
+import { SkillPlanner } from './orchestration/skill-planner.js';
+import { StagehandTool } from './integrations/browser/stagehand-tool.js';
 
 /**
  * Bootstrap: wire every subsystem into a cohesive runtime.
@@ -57,7 +65,13 @@ export interface RuntimeHandles {
   tools: ToolRegistry;
   longTermMemory: LongTermMemory;
   mem0: Mem0Adapter | null;
+  letta: Mem0Adapter | null;
+  zep: Mem0Adapter | null;
   mcp: MCPClient | null;
+  mcpGateway: GatedMCPClient | null;
+  codeqlMcp: MCPClient | null;
+  semgrepMcp: MCPClient | null;
+  skillPlanner: SkillPlanner | null;
   channels: ChannelRegistry;
   workspace: string;
   model: string;
@@ -107,10 +121,29 @@ export async function bootstrap(): Promise<RuntimeHandles> {
   }
 
   let mcp: MCPClient | null = null;
+  let mcpGateway: GatedMCPClient | null = null;
   if (feature('MCP') && (env.MCP_SERVER_URL || env.MCP_SERVER_STDIO)) {
     try {
       mcp = new MCPClient();
-      tools.register(new MCPTool(mcp));
+      if (feature('MCP_GATEWAY')) {
+        mcpGateway = buildGatedMCPClient({
+          client: mcp,
+          policy: {
+            allowTools: parseCsv(env.MCP_GATEWAY_ALLOW_TOOLS),
+            denyTools: parseCsv(env.MCP_GATEWAY_DENY_TOOLS),
+            rateLimitPerTool: env.MCP_GATEWAY_RATE_LIMIT,
+            rateWindowMs: env.MCP_GATEWAY_WINDOW_MS,
+            scanResponses: env.MCP_GATEWAY_SCAN_RESPONSES,
+            vigil:
+              env.MCP_GATEWAY_SCAN_RESPONSES && env.VIGIL_URL
+                ? new VigilClient({ baseUrl: env.VIGIL_URL, token: env.VIGIL_TOKEN })
+                : undefined,
+          },
+        });
+        tools.register(new MCPTool(mcpGateway as unknown as MCPClient));
+      } else {
+        tools.register(new MCPTool(mcp));
+      }
       if (feature('SOCIAL')) {
         for (const tool of buildSocialTools(mcp)) {
           tools.register(tool as Tool<unknown>);
@@ -122,6 +155,64 @@ export async function bootstrap(): Promise<RuntimeHandles> {
       });
     }
   }
+
+  let codeqlMcp: MCPClient | null = null;
+  if (feature('CODEQL_MCP') && (env.CODEQL_MCP_URL || env.CODEQL_MCP_STDIO)) {
+    try {
+      codeqlMcp = new MCPClient({ url: env.CODEQL_MCP_URL, stdio: env.CODEQL_MCP_STDIO });
+      const codeqlTool = new MCPTool(codeqlMcp);
+      (codeqlTool as { name: string }).name = 'codeql_mcp';
+      tools.register(codeqlTool);
+    } catch (err) {
+      logger.warn('bootstrap.codeql_mcp.error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  let semgrepMcp: MCPClient | null = null;
+  if (feature('SEMGREP_MCP') && (env.SEMGREP_MCP_URL || env.SEMGREP_MCP_STDIO)) {
+    try {
+      semgrepMcp = new MCPClient({ url: env.SEMGREP_MCP_URL, stdio: env.SEMGREP_MCP_STDIO });
+      const semgrepTool = new MCPTool(semgrepMcp);
+      (semgrepTool as { name: string }).name = 'semgrep_mcp';
+      tools.register(semgrepTool);
+    } catch (err) {
+      logger.warn('bootstrap.semgrep_mcp.error', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  let letta: Mem0Adapter | null = null;
+  if (feature('LETTA')) {
+    try {
+      letta = await createLettaMemory();
+    } catch (err) {
+      logger.warn('bootstrap.letta.error', { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  let zep: Mem0Adapter | null = null;
+  if (feature('ZEP')) {
+    try {
+      zep = await createZepMemory();
+    } catch (err) {
+      logger.warn('bootstrap.zep.error', { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  if (feature('VECTOR_STORES')) {
+    tools.register(new VectorStoreTool());
+  }
+  if (feature('RAG')) {
+    tools.register(new RagTool());
+  }
+  if (feature('STAGEHAND')) {
+    tools.register(new StagehandTool());
+  }
+
+  const skillPlanner = feature('SKILL_PLANNER') ? new SkillPlanner() : null;
 
   if (feature('SAST')) {
     tools.register(new SastTool());
@@ -195,10 +286,25 @@ export async function bootstrap(): Promise<RuntimeHandles> {
     tools,
     longTermMemory,
     mem0,
+    letta,
+    zep,
     mcp,
+    mcpGateway,
+    codeqlMcp,
+    semgrepMcp,
+    skillPlanner,
     channels,
     workspace: paths.workspace,
     model,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
   };
+}
+
+function parseCsv(raw: string | undefined): string[] | undefined {
+  if (!raw) return undefined;
+  const items = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return items.length > 0 ? items : undefined;
 }

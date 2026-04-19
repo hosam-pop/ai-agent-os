@@ -28,3 +28,5 @@ export {
   slackSendTool,
   calendarCreateTool,
 } from './social/social-tools.js';
+export { buildGatedMCPClient, type MCPGatewayPolicy, type GatedMCPClient } from './mcp/mcp-gateway.js';
+export { StagehandTool, type StagehandInput, type StagehandAction } from './browser/stagehand-tool.js';
