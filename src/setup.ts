@@ -26,6 +26,10 @@ import { Mem0Tool } from './integrations/mem0/mem0-tool.js';
 import { ChannelRegistry } from './integrations/openclaw/channel-adapter.js';
 import { TelegramAdapter } from './integrations/openclaw/telegram-adapter.js';
 import { SlackAdapter } from './integrations/openclaw/slack-adapter.js';
+import { SastTool } from './security/sast/sast-tool.js';
+import { DastTool } from './security/dast/dast-tool.js';
+import { LogAnalysisTool } from './security/log-analysis/log-analysis-tool.js';
+import { IdsTool } from './security/ids/ids-tool.js';
 
 /**
  * Bootstrap: wire every subsystem into a cohesive runtime.
@@ -112,6 +116,19 @@ export async function bootstrap(): Promise<RuntimeHandles> {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  if (feature('SAST')) {
+    tools.register(new SastTool());
+  }
+  if (feature('DAST')) {
+    tools.register(new DastTool());
+  }
+  if (feature('LOG_ANALYSIS')) {
+    tools.register(new LogAnalysisTool());
+  }
+  if (feature('IDS')) {
+    tools.register(new IdsTool());
   }
 
   const channels = new ChannelRegistry();
