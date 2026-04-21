@@ -104,7 +104,9 @@ You are now live. Greet the operator briefly when they first message, then help 
       'Gemini-powered control-plane manager with web search, code execution, file search, and deep knowledge of every ai-agent-os subsystem.',
     instructions: SYSTEM_PROMPT,
     provider: 'google',
-    model: 'gemini-2.5-pro',
+    // gemini-2.5-flash is the free-tier default; 2.5-pro needs a billed key.
+    // The operator can swap it from the UI once they upgrade.
+    model: 'gemini-2.5-flash',
     model_parameters: {
       temperature: 0.4,
       maxOutputTokens: 8192,
