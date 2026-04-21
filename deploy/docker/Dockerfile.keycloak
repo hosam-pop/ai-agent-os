@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1.7
+# ============================================================================
+# AI Agent OS — Keycloak 26 with baked-in realm and branded theme.
+# Post-boot provisioning (client secret, admin user) is done via kcadm.sh
+# from inside the running container (see scripts/keycloak-postboot.sh).
+# ============================================================================
+
+FROM quay.io/keycloak/keycloak:26.0 AS build
+
+ENV KC_DB=postgres
+ENV KC_HEALTH_ENABLED=true
+ENV KC_METRICS_ENABLED=true
+ENV KC_HTTP_ENABLED=true
+ENV KC_CACHE=local
+ENV KC_FEATURES=token-exchange,admin-fine-grained-authz
+
+COPY deploy/keycloak/realm/ai-agent-os-realm.json /opt/keycloak/data/import/ai-agent-os-realm.json
+COPY deploy/keycloak/themes/ai-agent-os /opt/keycloak/themes/ai-agent-os
+
+RUN /opt/keycloak/bin/kc.sh build
+
+FROM quay.io/keycloak/keycloak:26.0
+COPY --from=build /opt/keycloak/ /opt/keycloak/
+
+ENV KC_PROXY_HEADERS=xforwarded
+ENV KC_HTTP_ENABLED=true
+ENV KC_HOSTNAME_STRICT=false
+ENV KC_CACHE=local
+
+EXPOSE 8080
+ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
+CMD ["start", "--optimized", "--import-realm"]
