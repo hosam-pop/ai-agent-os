@@ -40,7 +40,17 @@ export type FeatureName =
   | 'SKILL_PLANNER'
   | 'STAGEHAND'
   | 'CODEQL_MCP'
-  | 'SEMGREP_MCP';
+  | 'SEMGREP_MCP'
+  | 'COMPOSIO'
+  | 'ARCADE'
+  | 'IRON_CURTAIN'
+  | 'KAVACH'
+  | 'LANGFUSE'
+  | 'POSTHOG'
+  | 'OPENLIT'
+  | 'AGENTWATCH'
+  | 'AGENTEST'
+  | 'TOOL_DISCOVERY';
 
 const ALL_FEATURES: FeatureName[] = [
   'BUDDY',
@@ -74,6 +84,16 @@ const ALL_FEATURES: FeatureName[] = [
   'STAGEHAND',
   'CODEQL_MCP',
   'SEMGREP_MCP',
+  'COMPOSIO',
+  'ARCADE',
+  'IRON_CURTAIN',
+  'KAVACH',
+  'LANGFUSE',
+  'POSTHOG',
+  'OPENLIT',
+  'AGENTWATCH',
+  'AGENTEST',
+  'TOOL_DISCOVERY',
 ];
 
 export function feature(name: FeatureName): boolean {
@@ -141,6 +161,26 @@ export function feature(name: FeatureName): boolean {
       return env.DOGE_FEATURE_CODEQL_MCP;
     case 'SEMGREP_MCP':
       return env.DOGE_FEATURE_SEMGREP_MCP;
+    case 'COMPOSIO':
+      return env.DOGE_FEATURE_COMPOSIO;
+    case 'ARCADE':
+      return env.DOGE_FEATURE_ARCADE;
+    case 'IRON_CURTAIN':
+      return env.DOGE_FEATURE_IRON_CURTAIN;
+    case 'KAVACH':
+      return env.DOGE_FEATURE_KAVACH;
+    case 'LANGFUSE':
+      return env.DOGE_FEATURE_LANGFUSE;
+    case 'POSTHOG':
+      return env.DOGE_FEATURE_POSTHOG;
+    case 'OPENLIT':
+      return env.DOGE_FEATURE_OPENLIT;
+    case 'AGENTWATCH':
+      return env.DOGE_FEATURE_AGENTWATCH;
+    case 'AGENTEST':
+      return env.DOGE_FEATURE_AGENTEST;
+    case 'TOOL_DISCOVERY':
+      return env.DOGE_FEATURE_TOOL_DISCOVERY;
     default: {
       const exhaustive: never = name;
       return exhaustive;
