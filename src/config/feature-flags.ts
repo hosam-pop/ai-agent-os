@@ -50,7 +50,15 @@ export type FeatureName =
   | 'OPENLIT'
   | 'AGENTWATCH'
   | 'AGENTEST'
-  | 'TOOL_DISCOVERY';
+  | 'TOOL_DISCOVERY'
+  | 'OPENFANG'
+  | 'ARGENTOR'
+  | 'QUALIXAR'
+  | 'ASTERAI_SANDBOX'
+  | 'AUTO_DREAM'
+  | 'GRAPH_MEMORY'
+  | 'TEMPORAL_MEMORY'
+  | 'HYBRID_RETRIEVAL';
 
 const ALL_FEATURES: FeatureName[] = [
   'BUDDY',
@@ -94,6 +102,14 @@ const ALL_FEATURES: FeatureName[] = [
   'AGENTWATCH',
   'AGENTEST',
   'TOOL_DISCOVERY',
+  'OPENFANG',
+  'ARGENTOR',
+  'QUALIXAR',
+  'ASTERAI_SANDBOX',
+  'AUTO_DREAM',
+  'GRAPH_MEMORY',
+  'TEMPORAL_MEMORY',
+  'HYBRID_RETRIEVAL',
 ];
 
 export function feature(name: FeatureName): boolean {
@@ -181,6 +197,22 @@ export function feature(name: FeatureName): boolean {
       return env.DOGE_FEATURE_AGENTEST;
     case 'TOOL_DISCOVERY':
       return env.DOGE_FEATURE_TOOL_DISCOVERY;
+    case 'OPENFANG':
+      return env.ENABLE_OPENFANG;
+    case 'ARGENTOR':
+      return env.ENABLE_ARGENTOR;
+    case 'QUALIXAR':
+      return env.ENABLE_QUALIXAR;
+    case 'ASTERAI_SANDBOX':
+      return env.ENABLE_ASTERAI_SANDBOX;
+    case 'AUTO_DREAM':
+      return env.ENABLE_AUTO_DREAM;
+    case 'GRAPH_MEMORY':
+      return env.ENABLE_GRAPH_MEMORY;
+    case 'TEMPORAL_MEMORY':
+      return env.ENABLE_TEMPORAL_MEMORY;
+    case 'HYBRID_RETRIEVAL':
+      return env.ENABLE_HYBRID_RETRIEVAL;
     default: {
       const exhaustive: never = name;
       return exhaustive;
