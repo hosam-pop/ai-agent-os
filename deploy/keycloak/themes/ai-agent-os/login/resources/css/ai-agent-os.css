@@ -29,12 +29,17 @@
 
 /* ---------- Base ---------- */
 
-html, body {
-  background:
+html, body, .login-pf, .login-pf body, .login-pf-page, #keycloak-bg, body#keycloak-bg {
+  background-color: var(--aaos-bg-0) !important;
+  background-image:
     radial-gradient(1200px 600px at 10% -10%, rgba(79, 157, 255, 0.18), transparent 60%),
-    radial-gradient(900px 500px at 110% 110%, rgba(122, 92, 255, 0.18), transparent 60%),
-    var(--aaos-bg-0) !important;
+    radial-gradient(900px 500px at 110% 110%, rgba(122, 92, 255, 0.18), transparent 60%) !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
   color: var(--aaos-fg) !important;
+}
+
+html, body {
   font-family:
     "Cairo", "IBM Plex Sans Arabic", "Tajawal",
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif !important;
@@ -43,7 +48,6 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
-.login-pf, .login-pf body { background: transparent !important; }
 .login-pf-page { padding-top: 0 !important; }
 
 /* ---------- Header / brand pill ---------- */
@@ -55,17 +59,17 @@ html, body {
   color: var(--aaos-fg);
 }
 
+h1,
+h1#kc-page-title,
 .login-pf-page-header h1,
 .pf-c-login__header h1 {
-  font-size: 28px;
-  line-height: 1.25;
+  font-size: 26px !important;
+  line-height: 1.3 !important;
   letter-spacing: 0.01em;
-  font-weight: 700;
-  background: linear-gradient(90deg, var(--aaos-accent), var(--aaos-accent-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  margin: 8px 0 4px 0;
+  font-weight: 700 !important;
+  color: var(--aaos-fg) !important;
+  margin: 16px 0 12px 0 !important;
+  text-align: center;
 }
 
 #kc-header-wrapper,
@@ -99,7 +103,7 @@ html, body {
 
 /* ---------- Typography / labels ---------- */
 
-h1, h2, h3 { color: var(--aaos-fg) !important; }
+h2, h3 { color: var(--aaos-fg) !important; }
 
 label,
 .pf-c-form__label,
@@ -179,22 +183,34 @@ button {
   cursor: pointer;
 }
 
+/* Primary submit button — catches every shape Keycloak.v2 might render */
 .pf-c-button.pf-m-primary,
 input[type="submit"].btn-primary,
 .btn-primary,
-#kc-login {
+#kc-login,
+#kc-form-login button[type="submit"],
+form button[type="submit"],
+button[name="login"],
+button[type="submit"][name="login"],
+input[type="submit"][name="login"],
+#kc-form-buttons button[type="submit"],
+#kc-form-buttons input[type="submit"] {
   background: linear-gradient(90deg, var(--aaos-accent), var(--aaos-accent-2)) !important;
-  color: white !important;
+  background-color: var(--aaos-accent) !important;
+  color: #ffffff !important;
   border: none !important;
   box-shadow: 0 10px 28px -12px rgba(79, 157, 255, 0.7) !important;
 }
 
 .pf-c-button.pf-m-primary:hover,
 .btn-primary:hover,
-#kc-login:hover { transform: translateY(-1px); filter: brightness(1.05); }
+#kc-login:hover,
+button[name="login"]:hover,
+button[type="submit"]:hover { transform: translateY(-1px); filter: brightness(1.05); }
 
 .pf-c-button.pf-m-primary:active,
-.btn-primary:active { transform: translateY(0); filter: brightness(0.95); }
+.btn-primary:active,
+button[name="login"]:active { transform: translateY(0); filter: brightness(0.95); }
 
 .pf-c-button.pf-m-secondary,
 .btn-default,
