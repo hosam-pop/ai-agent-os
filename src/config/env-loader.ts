@@ -194,6 +194,38 @@ const EnvSchema = z.object({
   AGENTWATCH_SERVICE_NAME: z.string().optional(),
 
   AGENTEST_API_KEY: z.string().optional(),
+
+  // enterprise-architecture-v1 gates — every one default false.
+  ENABLE_OPENFANG: z.coerce.boolean().default(false),
+  ENABLE_ARGENTOR: z.coerce.boolean().default(false),
+  ENABLE_QUALIXAR: z.coerce.boolean().default(false),
+  ENABLE_ASTERAI_SANDBOX: z.coerce.boolean().default(false),
+  ENABLE_AUTO_DREAM: z.coerce.boolean().default(false),
+  ENABLE_GRAPH_MEMORY: z.coerce.boolean().default(false),
+  ENABLE_TEMPORAL_MEMORY: z.coerce.boolean().default(false),
+  ENABLE_HYBRID_RETRIEVAL: z.coerce.boolean().default(false),
+
+  OPENFANG_ENDPOINT: z.string().url().optional(),
+  OPENFANG_API_KEY: z.string().optional(),
+  OPENFANG_MCP_STDIO: z.string().optional(),
+
+  ARGENTOR_ENDPOINT: z.string().url().optional(),
+  ARGENTOR_API_KEY: z.string().optional(),
+  ARGENTOR_MCP_STDIO: z.string().optional(),
+
+  QUALIXAR_ENDPOINT: z.string().url().optional(),
+  QUALIXAR_API_KEY: z.string().optional(),
+
+  ASTERAI_WASM_DIR: z.string().optional(),
+  ASTERAI_DEFAULT_FUEL: z.coerce.number().int().positive().optional(),
+
+  AUTO_DREAM_INTERVAL_MS: z.coerce.number().int().positive().optional(),
+  AUTO_DREAM_MIN_ENTRIES: z.coerce.number().int().positive().optional(),
+
+  KUZU_DB_PATH: z.string().optional(),
+
+  HYBRID_BM25_WEIGHT: z.coerce.number().optional(),
+  HYBRID_VECTOR_WEIGHT: z.coerce.number().optional(),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;
