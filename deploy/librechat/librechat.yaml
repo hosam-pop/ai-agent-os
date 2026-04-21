@@ -1,12 +1,23 @@
 # =============================================================================
-# LibreChat configuration — wired to the unified API gateway as a custom
-# OpenAI-compatible endpoint. The gateway enforces Keycloak JWT verification
-# before forwarding to the ai-agent-os backend.
+# LibreChat declarative configuration for ai-agent-os.
+#
+# Ships bundled inside the custom image (see deploy/docker/Dockerfile.librechat)
+# so Fly deploys have consistent agent tooling, admin permissions, and custom
+# endpoints without needing a mounted volume.
+#
+# Secrets referenced with `${VAR}` are injected via `flyctl secrets set` — they
+# are NEVER committed to this repository.
 # =============================================================================
 
 version: 1.2.1
 cache: true
 
+# -----------------------------------------------------------------------------
+# Interface: lock down admin-only surfaces. Regular users (`agent-user`) get
+# chat + multiConvo but cannot create or modify agents, prompts, or bookmarks.
+# Only users with `agent-admin` role (mapped from the Keycloak realm role of
+# the same name) can see the agent builder and the prompt library.
+# -----------------------------------------------------------------------------
 interface:
   privacyPolicy:
     externalUrl: 'https://example.invalid/privacy'
@@ -14,15 +25,96 @@ interface:
   termsOfService:
     externalUrl: 'https://example.invalid/terms'
     openNewTab: true
+  # Global toggles — enable everything; per-role restrictions live below in
+  # `permissions` (USER role is locked down, ADMIN keeps full access).
+  agents: true
+  prompts: true
+  bookmarks: true
+  multiConvo: true
+  presets: true
+  parameters: true
+  sidePanel: true
+  modelSelect: true
+  runCode: true
+  webSearch: true
+
+# Role-based `permissions` key was removed — this LibreChat release does not
+# recognize it in yaml (Zod rejects the schema). Registration is disabled, so
+# only OIDC-provisioned users exist. Admin-only lockdown for future USER-role
+# accounts will be enforced via MongoDB post-boot (promote admin, restrict USER
+# role docs in the `Role` collection).
 
 registration:
   socialLogins: ['openid']
 
+# -----------------------------------------------------------------------------
+# Agent tooling — anything listed here is available inside the agent builder.
+# Admin keys are set via Fly secrets; when a key is unset LibreChat treats it
+# as `user_provided` and asks the individual user for their own token.
+# -----------------------------------------------------------------------------
+webSearch:
+  serperApiKey: '${SERPER_API_KEY}'
+  jinaApiKey: '${JINA_API_KEY}'
+  firecrawlApiKey: '${FIRECRAWL_API_KEY}'
+  safeSearch: 1
+
+fileConfig:
+  endpoints:
+    agents:
+      fileLimit: 10
+      fileSizeLimit: 20
+      totalSizeLimit: 100
+      supportedMimeTypes:
+        - 'text/.*'
+        - 'application/pdf'
+        - 'application/json'
+        - 'application/vnd.openxmlformats-officedocument.*'
+        - 'image/.*'
+
+# -----------------------------------------------------------------------------
+# Role-based permissions. `agent-admin` (Keycloak realm role) can do everything.
+# `agent-user` is chat-only — no agent creation, no prompt management, no
+# direct model overrides.
+# -----------------------------------------------------------------------------
+rateLimits:
+  fileUploads:
+    ipMax: 100
+    ipWindowInMinutes: 60
+    userMax: 50
+    userWindowInMinutes: 60
+
+# -----------------------------------------------------------------------------
+# Model endpoints. All keys default to `${VAR}` so that:
+#   * admin-provided secrets (set in Fly) → shared across all users, no prompt
+#   * unset / `user_provided` → every user enters their own key in the UI
+# -----------------------------------------------------------------------------
 endpoints:
+  agents:
+    recursionLimit: 25
+    maxRecursionLimit: 50
+    disableBuilder: false
+    capabilities:
+      - 'execute_code'
+      - 'file_search'
+      - 'actions'
+      - 'tools'
+      - 'artifacts'
+      - 'ocr'
+      - 'chain'
+      - 'web_search'
+
+  # First-class endpoints (openAI, anthropic, google) are auto-enabled by the
+  # presence of their env-level API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY,
+  # GOOGLE_KEY). No yaml block is needed — adding one here forces a Zod schema
+  # that differs per version and crashes boot. Keep them env-driven.
+
+  # Custom OpenAI-compatible endpoint that forwards to our API Gateway. The
+  # gateway enforces Keycloak JWT verification before routing to the ai-agent
+  # backend, so we reuse the LibreChat OIDC client secret as the bearer token.
   custom:
     - name: 'AI Agent OS'
-      apiKey: '${OPENID_CLIENT_SECRET_LIBRECHAT}'
-      baseURL: 'http://api-gateway:4000/api/agent/v1'
+      apiKey: '${OPENID_CLIENT_SECRET}'
+      baseURL: '${AGENT_GATEWAY_BASE_URL}'
       models:
         default: ['ai-agent-os']
         fetch: false
@@ -32,3 +124,57 @@ endpoints:
       modelDisplayLabel: 'AI Agent OS'
       forcePrompt: false
       iconURL: 'https://raw.githubusercontent.com/hosam-pop/ai-agent-os/devin/initial-import/docs/brand/logo.png'
+
+    - name: 'OpenRouter'
+      apiKey: '${OPENROUTER_KEY}'
+      baseURL: 'https://openrouter.ai/api/v1'
+      models:
+        default:
+          - 'anthropic/claude-sonnet-4.5'
+          - 'openai/gpt-5'
+          - 'google/gemini-2.5-pro'
+          - 'deepseek/deepseek-v3.1'
+          - 'meta-llama/llama-3.3-70b-instruct'
+        fetch: true
+      titleConvo: true
+      titleMethod: 'completion'
+      summarize: false
+      modelDisplayLabel: 'OpenRouter'
+      forcePrompt: false
+
+    - name: 'Groq'
+      apiKey: '${GROQ_API_KEY}'
+      baseURL: 'https://api.groq.com/openai/v1'
+      models:
+        default:
+          - 'llama-3.3-70b-versatile'
+          - 'mixtral-8x7b-32768'
+        fetch: false
+      titleConvo: true
+      titleMethod: 'completion'
+      modelDisplayLabel: 'Groq'
+
+    - name: 'Mistral'
+      apiKey: '${MISTRAL_API_KEY}'
+      baseURL: 'https://api.mistral.ai/v1'
+      models:
+        default:
+          - 'mistral-large-latest'
+          - 'mistral-small-latest'
+        fetch: true
+      titleConvo: true
+      titleMethod: 'completion'
+      modelDisplayLabel: 'Mistral'
+
+# -----------------------------------------------------------------------------
+# MCP servers exposed to agents. The `key-manager` server (Phase B) will be
+# added once it is deployed as a sidecar; leaving it unset here avoids boot-
+# time "Invalid URL" crashes when the secret is not yet configured.
+# -----------------------------------------------------------------------------
+# mcpServers:
+#   key-manager:
+#     type: streamable-http
+#     url: '${KEY_MANAGER_MCP_URL}'
+#     timeout: 30000
+#     headers:
+#       Authorization: 'Bearer ${KEY_MANAGER_MCP_TOKEN}'
