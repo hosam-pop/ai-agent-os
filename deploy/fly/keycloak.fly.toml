@@ -32,6 +32,9 @@ kill_timeout = "30s"
   KC_METRICS_ENABLED = "true"
   KC_LOG_LEVEL = "INFO"
   KC_CACHE = "local"
+  KC_SPI_THEME_STATIC_MAX_AGE = "60"
+  KC_SPI_THEME_CACHE_THEMES = "false"
+  KC_SPI_THEME_CACHE_TEMPLATES = "false"
 
 # The realm JSON and custom theme are baked into the image
 # (see deploy/docker/Dockerfile.keycloak). The entrypoint runs
