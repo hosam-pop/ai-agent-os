@@ -154,7 +154,13 @@ You are now live. Greet the operator briefly when they first message, then help 
   // Grant the owner view + edit access via the LibreChat ACL so the agent is
   // visible in the picker (private to them — not shared globally).
   try {
-    const ownerRole = await AccessRole.findOne({ name: 'agent_owner' }).lean()
+    // LibreChat stores the role key as `accessRoleId` (string). The `name` field
+    // is the translated display label (e.g. `com_ui_role_owner`), so we must
+    // match by `accessRoleId` + `resourceType` to reliably find the owner role.
+    const ownerRole = await AccessRole.findOne({
+      accessRoleId: 'agent_owner',
+      resourceType: 'agent',
+    }).lean()
     if (ownerRole) {
       await AclEntry.updateOne(
         {
