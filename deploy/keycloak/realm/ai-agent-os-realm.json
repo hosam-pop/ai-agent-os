@@ -38,25 +38,48 @@
   "otpPolicyAlgorithm": "HmacSHA256",
   "otpPolicyDigits": 6,
   "otpPolicyPeriod": 30,
-  "otpSupportedApplications": ["FreeOTP", "Google Authenticator", "Microsoft Authenticator"],
+  "otpSupportedApplications": [
+    "FreeOTP",
+    "Google Authenticator",
+    "Microsoft Authenticator"
+  ],
   "webAuthnPolicyRpEntityName": "AI Agent OS",
-  "webAuthnPolicySignatureAlgorithms": ["ES256", "RS256"],
+  "webAuthnPolicySignatureAlgorithms": [
+    "ES256",
+    "RS256"
+  ],
   "webAuthnPolicyUserVerificationRequirement": "preferred",
   "roles": {
     "realm": [
-      { "name": "agent-admin", "description": "Full administrative access to the AI Agent OS platform" },
-      { "name": "agent-user", "description": "Standard user able to interact with the agent via chat and dashboards" },
-      { "name": "agent-service", "description": "Service account role for backend-to-backend calls" },
-      { "name": "agent-auditor", "description": "Read-only access to audit logs and observability dashboards" }
+      {
+        "name": "agent-admin",
+        "description": "Full administrative access to the AI Agent OS platform"
+      },
+      {
+        "name": "agent-user",
+        "description": "Standard user able to interact with the agent via chat and dashboards"
+      },
+      {
+        "name": "agent-service",
+        "description": "Service account role for backend-to-backend calls"
+      },
+      {
+        "name": "agent-auditor",
+        "description": "Read-only access to audit logs and observability dashboards"
+      }
     ]
   },
-  "defaultRoles": ["agent-user"],
+  "defaultRoles": [
+    "agent-user"
+  ],
   "defaultRole": {
     "name": "default-roles-ai-agent-os",
     "description": "Default role containing agent-user for all new users",
     "composite": true,
     "composites": {
-      "realm": ["agent-user"]
+      "realm": [
+        "agent-user"
+      ]
     },
     "clientRole": false
   },
@@ -64,17 +87,26 @@
     {
       "name": "agent-admins",
       "path": "/agent-admins",
-      "realmRoles": ["agent-admin", "agent-user", "agent-auditor"]
+      "realmRoles": [
+        "agent-admin",
+        "agent-user",
+        "agent-auditor"
+      ]
     },
     {
       "name": "agent-users",
       "path": "/agent-users",
-      "realmRoles": ["agent-user"]
+      "realmRoles": [
+        "agent-user"
+      ]
     },
     {
       "name": "agent-auditors",
       "path": "/agent-auditors",
-      "realmRoles": ["agent-auditor", "agent-user"]
+      "realmRoles": [
+        "agent-auditor",
+        "agent-user"
+      ]
     }
   ],
   "clientScopes": [
@@ -146,11 +178,11 @@
       "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:3080/oauth/openid/callback",
-        "https://*.fly.dev/oauth/openid/callback"
+        "https://ai-agent-os-librechat.fly.dev/oauth/openid/callback"
       ],
       "webOrigins": [
         "http://localhost:3080",
-        "https://*.fly.dev"
+        "https://ai-agent-os-librechat.fly.dev"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
@@ -165,7 +197,10 @@
         "email",
         "ai-agent-os-audience"
       ],
-      "optionalClientScopes": ["offline_access", "microprofile-jwt"]
+      "optionalClientScopes": [
+        "offline_access",
+        "microprofile-jwt"
+      ]
     },
     {
       "clientId": "ai-agent-os-panel",
@@ -212,7 +247,9 @@
   ],
   "smtpServer": {},
   "eventsEnabled": true,
-  "eventsListeners": ["jboss-logging"],
+  "eventsListeners": [
+    "jboss-logging"
+  ],
   "enabledEventTypes": [
     "LOGIN",
     "LOGIN_ERROR",

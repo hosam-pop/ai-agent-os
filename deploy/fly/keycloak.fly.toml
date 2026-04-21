@@ -13,15 +13,15 @@
 # ============================================================================
 
 app = "ai-agent-os-keycloak"
-primary_region = "iad"
+primary_region = "fra"
 kill_signal = "SIGTERM"
 kill_timeout = "30s"
 
 [build]
-  image = "quay.io/keycloak/keycloak:26.0"
+  # dockerfile is passed via CLI: --dockerfile deploy/docker/Dockerfile.keycloak
 
 [deploy]
-  strategy = "rolling"
+  strategy = "immediate"
 
 [env]
   KC_HTTP_ENABLED = "true"
@@ -31,17 +31,11 @@ kill_timeout = "30s"
   KC_HEALTH_ENABLED = "true"
   KC_METRICS_ENABLED = "true"
   KC_LOG_LEVEL = "INFO"
-  KC_CACHE = "ispn"
+  KC_CACHE = "local"
 
-# Import realm + mount the AI Agent OS theme on startup. Fly cannot bake the
-# realm file into the upstream image, so we mount it via a volume populated
-# at deploy time (see `flyctl deploy --build-only && flyctl ssh sftp` flow in
-# docs/DEPLOYMENT_ARCHITECTURE.md) OR build a derived image locally.
-processes = { app = "start --optimized --import-realm" }
-
-[[mounts]]
-  source = "keycloak_data"
-  destination = "/opt/keycloak/data"
+# The realm JSON and custom theme are baked into the image
+# (see deploy/docker/Dockerfile.keycloak). The entrypoint runs
+# `start --optimized --import-realm` automatically.
 
 [[services]]
   protocol = "tcp"
@@ -65,14 +59,14 @@ processes = { app = "start --optimized --import-realm" }
     soft_limit = 300
 
   [[services.http_checks]]
-    interval = "20s"
-    timeout = "5s"
-    grace_period = "60s"
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "180s"
     method = "get"
-    path = "/health/ready"
+    path = "/realms/ai-agent-os/.well-known/openid-configuration"
     protocol = "http"
     tls_skip_verify = false
 
 [[vm]]
   size = "shared-cpu-2x"
-  memory = "2048mb"
+  memory = "4096mb"

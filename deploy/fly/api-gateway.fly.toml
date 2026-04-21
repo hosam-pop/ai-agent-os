@@ -10,12 +10,12 @@
 # ============================================================================
 
 app = "ai-agent-os-gateway"
-primary_region = "iad"
+primary_region = "fra"
 kill_signal = "SIGTERM"
 kill_timeout = "10s"
 
 [build]
-  dockerfile = "../../deploy/docker/Dockerfile.gateway"
+  # dockerfile is passed via CLI: --dockerfile deploy/docker/Dockerfile.gateway
 
 [deploy]
   strategy = "rolling"

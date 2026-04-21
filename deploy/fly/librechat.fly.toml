@@ -13,7 +13,7 @@
 # ============================================================================
 
 app = "ai-agent-os-librechat"
-primary_region = "iad"
+primary_region = "fra"
 kill_signal = "SIGTERM"
 kill_timeout = "10s"
 
