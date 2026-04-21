@@ -1,0 +1,46 @@
+# =============================================================================
+# SearXNG for AI Agent OS — self-hosted meta search engine that fronts the
+# LibreChat `webSearch` integration. Uses a custom image (Dockerfile.searxng)
+# that bakes settings.yml + limiter.toml so no persistent volume is needed.
+# =============================================================================
+
+app = "ai-agent-os-searxng"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "10s"
+
+[build]
+  dockerfile = "../../deploy/docker/Dockerfile.searxng"
+
+[env]
+  BIND_ADDRESS = "0.0.0.0:8080"
+  INSTANCE_NAME = "AI Agent OS Search"
+  SEARXNG_SETTINGS_PATH = "/etc/searxng/settings.yml"
+  SEARXNG_LIMITER_PATH = "/etc/searxng/limiter.toml"
+  # Redis/Valkey is optional for a single-instance deploy. Leave empty; the
+  # limiter we ship is scoped to local memory so we do not need external state.
+  SEARXNG_REDIS_URL = ""
+
+# Public HTTP — LibreChat reaches SearXNG over the Fly internal 6PN address
+# at `http://ai-agent-os-searxng.internal:8080`, but we also expose public
+# HTTPS so we can smoke-test the JSON API from outside.
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

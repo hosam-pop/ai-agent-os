@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+#
+# SearXNG image for ai-agent-os. Builds on the official upstream image and
+# bakes our settings.yml / limiter.toml into the image so Fly deploys do not
+# need a persistent volume. The runtime secret (`SEARXNG_SECRET`) is injected
+# via `flyctl secrets set` and patched into settings.yml at container start.
+
+FROM searxng/searxng:latest
+
+USER root
+
+# Copy our baseline config. The upstream image reads these at
+# /etc/searxng/settings.yml and /etc/searxng/limiter.toml at boot.
+COPY deploy/searxng/settings.yml   /etc/searxng/settings.yml
+# limiter.toml is intentionally NOT shipped — we set limiter=false in
+# settings.yml, and upstream's schema validator rejects partial limiter
+# configs. If you re-enable limiter, put the file back here.
+
+# Entrypoint wrapper: patch settings.yml's secret_key with the real value
+# from env (SEARXNG_SECRET), then hand off to the upstream entrypoint.
+COPY deploy/docker/searxng-entrypoint.sh /usr/local/bin/ai-agent-os-entrypoint.sh
+RUN chmod +x /usr/local/bin/ai-agent-os-entrypoint.sh
+
+# Hand ownership back to the searxng user baked into the upstream image.
+RUN chown -R searxng:searxng /etc/searxng
+
+USER searxng
+
+ENV SEARXNG_SETTINGS_PATH=/etc/searxng/settings.yml \
+    SEARXNG_LIMITER_PATH=/etc/searxng/limiter.toml \
+    BIND_ADDRESS=0.0.0.0:8080
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/ai-agent-os-entrypoint.sh"]
