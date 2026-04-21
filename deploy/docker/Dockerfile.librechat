@@ -1,0 +1,18 @@
+# =============================================================================
+# Custom LibreChat image that bundles ai-agent-os librechat.yaml
+#
+# LibreChat's official image does NOT mount /app/librechat.yaml automatically
+# on Fly.io (no volume attach, Fly secrets cannot inject files). Without this
+# yaml, agents/tools/custom endpoints are not available — the admin cannot
+# enable web search, RAG, code interpreter, or image generation.
+#
+# This image extends the upstream LibreChat release and copies in our
+# declarative config so every Fly deploy ships with the same agent tooling.
+# =============================================================================
+FROM ghcr.io/danny-avila/librechat:latest
+
+# Bundle the declarative config so LibreChat's `ensureBaseConfig` picks it up
+# at boot. `/app/librechat.yaml` is the path LibreChat checks by default.
+COPY deploy/librechat/librechat.yaml /app/librechat.yaml
+
+# Keep the upstream entrypoint and CMD.

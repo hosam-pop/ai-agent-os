@@ -18,7 +18,10 @@ kill_signal = "SIGTERM"
 kill_timeout = "10s"
 
 [build]
-  image = "ghcr.io/danny-avila/librechat:latest"
+  # Custom image that bundles /app/librechat.yaml so agent tooling, role
+  # permissions, and custom endpoints ship with every deploy. See
+  # deploy/docker/Dockerfile.librechat for what we layer on top of upstream.
+  dockerfile = "deploy/docker/Dockerfile.librechat"
 
 [deploy]
   strategy = "rolling"
