@@ -1,63 +1,90 @@
-/* ==========================================================================
-   AI Agent OS — Branded Keycloak Login Theme
-   Dark, enterprise-grade look. No external fonts (CSP-friendly).
-   ========================================================================== */
+/* ============================================================================
+   AI Agent OS — Branded Keycloak Login Theme (v2, polished)
+   - Dark enterprise look with readable labels, big buttons, proper banners.
+   - Uses system Arabic fonts on mobile (no external font download, CSP-safe).
+   - Works in LTR and RTL.
+   ============================================================================ */
 
 :root {
   --aaos-bg-0: #05070b;
   --aaos-bg-1: #0b0f17;
   --aaos-bg-2: #141a26;
-  --aaos-fg: #e6edf7;
+  --aaos-bg-3: #1a2232;
+  --aaos-fg: #f2f6fc;
+  --aaos-fg-dim: #c4d0e3;
   --aaos-muted: #8aa0bf;
+  --aaos-placeholder: #5f7493;
   --aaos-accent: #4f9dff;
   --aaos-accent-2: #7a5cff;
-  --aaos-border: #1e2a3e;
-  --aaos-danger: #ff6b6b;
+  --aaos-border: #233149;
+  --aaos-border-strong: #2e4063;
+  --aaos-danger-bg: #2a1214;
+  --aaos-danger-border: #b24141;
+  --aaos-danger-fg: #ffb3b3;
   --aaos-ok: #3fd39c;
   --aaos-radius: 14px;
-  --aaos-shadow: 0 12px 40px -16px rgba(79, 157, 255, 0.35);
+  --aaos-shadow: 0 20px 60px -20px rgba(79, 157, 255, 0.35),
+                 0 2px 10px rgba(0, 0, 0, 0.5);
 }
 
+/* ---------- Base ---------- */
+
 html, body {
-  background: radial-gradient(1200px 600px at 10% -10%, rgba(79, 157, 255, 0.18), transparent 60%),
-              radial-gradient(900px 500px at 110% 110%, rgba(122, 92, 255, 0.18), transparent 60%),
-              var(--aaos-bg-0) !important;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(79, 157, 255, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 110% 110%, rgba(122, 92, 255, 0.18), transparent 60%),
+    var(--aaos-bg-0) !important;
   color: var(--aaos-fg) !important;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif !important;
+  font-family:
+    "Cairo", "IBM Plex Sans Arabic", "Tajawal",
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif !important;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .login-pf, .login-pf body { background: transparent !important; }
 .login-pf-page { padding-top: 0 !important; }
 
+/* ---------- Header / brand pill ---------- */
+
 .login-pf-page-header,
 .pf-c-login__header {
   text-align: center;
-  padding: 48px 0 16px 0;
+  padding: 48px 16px 16px 16px;
   color: var(--aaos-fg);
 }
 
 .login-pf-page-header h1,
 .pf-c-login__header h1 {
-  letter-spacing: 0.02em;
-  font-weight: 600;
+  font-size: 28px;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  font-weight: 700;
   background: linear-gradient(90deg, var(--aaos-accent), var(--aaos-accent-2));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  margin: 8px 0 4px 0;
 }
 
 #kc-header-wrapper,
 .pf-c-brand {
   display: inline-block;
-  padding: 8px 18px;
+  padding: 10px 20px;
   border-radius: 999px;
-  background: rgba(79, 157, 255, 0.08);
-  border: 1px solid var(--aaos-border);
-  font-weight: 600;
+  background: rgba(79, 157, 255, 0.12);
+  border: 1px solid var(--aaos-border-strong);
+  font-weight: 700;
   font-size: 14px;
-  color: var(--aaos-fg);
+  line-height: 1.2;
+  color: var(--aaos-fg) !important;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px -6px rgba(79, 157, 255, 0.3);
 }
+
+/* ---------- Card ---------- */
 
 .card-pf,
 .pf-c-login__main {
@@ -65,84 +92,287 @@ html, body {
   border: 1px solid var(--aaos-border) !important;
   border-radius: var(--aaos-radius) !important;
   box-shadow: var(--aaos-shadow) !important;
-  padding: 32px !important;
+  padding: 32px 28px !important;
+  max-width: 440px !important;
+  margin: 0 auto !important;
 }
 
-h1, h2, h3, label, .pf-c-form__label {
+/* ---------- Typography / labels ---------- */
+
+h1, h2, h3 { color: var(--aaos-fg) !important; }
+
+label,
+.pf-c-form__label,
+.pf-c-form__label-text,
+#kc-form-login label,
+.pf-c-form-control-label {
   color: var(--aaos-fg) !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  margin-bottom: 8px !important;
+  display: block !important;
+  opacity: 1 !important;
 }
+
+/* Kill any floating-label ghosting from keycloak.v2 */
+.pf-c-form__group-control .pf-c-form__label,
+.pf-c-form__label.pf-m-floating {
+  position: static !important;
+  transform: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* ---------- Inputs ---------- */
 
 .pf-c-form-control,
 input[type="text"],
 input[type="email"],
 input[type="password"],
-textarea {
+input[type="tel"],
+textarea,
+select {
   background: var(--aaos-bg-0) !important;
   color: var(--aaos-fg) !important;
-  border: 1px solid var(--aaos-border) !important;
+  border: 1px solid var(--aaos-border-strong) !important;
   border-radius: 10px !important;
-  padding: 12px 14px !important;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  padding: 14px 14px !important;
+  font-size: 16px !important;
+  line-height: 1.3 !important;
+  width: 100% !important;
+  box-shadow: none !important;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
 }
 
+input::placeholder { color: var(--aaos-placeholder) !important; opacity: 1 !important; }
+
 .pf-c-form-control:focus,
-input:focus {
+input:focus,
+textarea:focus,
+select:focus {
   outline: none !important;
   border-color: var(--aaos-accent) !important;
-  box-shadow: 0 0 0 3px rgba(79, 157, 255, 0.2) !important;
+  background: var(--aaos-bg-1) !important;
+  box-shadow: 0 0 0 3px rgba(79, 157, 255, 0.22) !important;
 }
+
+/* Invalid input border */
+.pf-c-form-control[aria-invalid="true"],
+input[aria-invalid="true"] {
+  border-color: var(--aaos-danger-border) !important;
+  box-shadow: 0 0 0 3px rgba(178, 65, 65, 0.25) !important;
+}
+
+/* ---------- Buttons ---------- */
 
 .pf-c-button,
 input[type="submit"],
 button {
   border-radius: 10px !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
+  font-size: 16px !important;
   letter-spacing: 0.01em;
-  padding: 12px 18px !important;
-  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+  padding: 14px 22px !important;
+  min-height: 48px !important;
+  width: 100% !important;
+  transition: transform 120ms ease, box-shadow 150ms ease, background 150ms ease, opacity 150ms ease;
+  cursor: pointer;
 }
 
 .pf-c-button.pf-m-primary,
 input[type="submit"].btn-primary,
-.btn-primary {
+.btn-primary,
+#kc-login {
   background: linear-gradient(90deg, var(--aaos-accent), var(--aaos-accent-2)) !important;
   color: white !important;
   border: none !important;
-  box-shadow: 0 8px 24px -10px rgba(79, 157, 255, 0.65) !important;
+  box-shadow: 0 10px 28px -12px rgba(79, 157, 255, 0.7) !important;
 }
 
 .pf-c-button.pf-m-primary:hover,
-.btn-primary:hover {
-  transform: translateY(-1px);
+.btn-primary:hover,
+#kc-login:hover { transform: translateY(-1px); filter: brightness(1.05); }
+
+.pf-c-button.pf-m-primary:active,
+.btn-primary:active { transform: translateY(0); filter: brightness(0.95); }
+
+.pf-c-button.pf-m-secondary,
+.btn-default,
+.pf-c-button.pf-m-tertiary {
+  background: transparent !important;
+  color: var(--aaos-fg) !important;
+  border: 1px solid var(--aaos-border-strong) !important;
 }
+.pf-c-button.pf-m-secondary:hover,
+.btn-default:hover { background: var(--aaos-bg-3) !important; }
+
+/* ---------- Links ---------- */
 
 a, a:visited {
   color: var(--aaos-accent) !important;
   text-decoration: none !important;
+  font-weight: 600;
 }
-
 a:hover { text-decoration: underline !important; }
 
-.alert, .pf-c-alert {
+/* ---------- Alerts (error/success banners) ---------- */
+
+.alert,
+.pf-c-alert,
+#input-error,
+.kc-feedback-text,
+.pf-c-form__helper-text.pf-m-error {
+  display: block;
   border-radius: 10px !important;
-  border: 1px solid var(--aaos-border) !important;
-  background: rgba(255, 107, 107, 0.08) !important;
-  color: var(--aaos-danger) !important;
+  padding: 12px 14px !important;
+  margin: 8px 0 !important;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
-.pf-c-alert.pf-m-success {
-  background: rgba(63, 211, 156, 0.08) !important;
-  color: var(--aaos-ok) !important;
+.alert-error,
+.pf-c-alert.pf-m-danger,
+.pf-c-alert.pf-m-warning,
+#kc-content-wrapper .alert-error,
+.pf-m-error #input-error,
+.pf-c-form__helper-text.pf-m-error {
+  background: var(--aaos-danger-bg) !important;
+  color: var(--aaos-danger-fg) !important;
+  border: 1px solid var(--aaos-danger-border) !important;
 }
+
+.alert-success,
+.pf-c-alert.pf-m-success {
+  background: rgba(63, 211, 156, 0.10) !important;
+  color: var(--aaos-ok) !important;
+  border: 1px solid rgba(63, 211, 156, 0.4) !important;
+}
+
+.pf-c-alert__icon { opacity: 0.9; }
+
+/* ---------- Checkbox / remember me ---------- */
+
+.pf-c-check,
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--aaos-fg-dim);
+  font-size: 14px;
+}
+
+.pf-c-check__input,
+input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  accent-color: var(--aaos-accent);
+}
+
+/* ---------- Social providers (Google/GitHub etc.) ---------- */
+
+#kc-social-providers { margin-top: 20px; }
+
+#kc-social-providers h2,
+#kc-social-providers .kc-social-section-header {
+  color: var(--aaos-muted) !important;
+  font-size: 12px !important;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-align: center;
+  margin: 20px 0 12px 0;
+  position: relative;
+}
+#kc-social-providers h2::before,
+#kc-social-providers h2::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 35%;
+  height: 1px;
+  background: var(--aaos-border);
+}
+#kc-social-providers h2::before { left: 0; }
+#kc-social-providers h2::after  { right: 0; }
+
+#kc-social-providers ul {
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#kc-social-providers a,
+.kc-social-provider-link,
+.pf-c-login__main-footer-links a {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px !important;
+  background: var(--aaos-bg-3) !important;
+  color: var(--aaos-fg) !important;
+  border: 1px solid var(--aaos-border-strong) !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
+  text-decoration: none !important;
+}
+#kc-social-providers a:hover,
+.kc-social-provider-link:hover {
+  background: var(--aaos-bg-2) !important;
+  border-color: var(--aaos-accent) !important;
+  text-decoration: none !important;
+}
+
+/* ---------- Footer / info strip ---------- */
 
 .login-pf-page-footer,
 .pf-c-login__footer,
 #kc-info,
 .instruction {
   color: var(--aaos-muted) !important;
+  font-size: 13px;
+  text-align: center;
+  margin-top: 16px;
 }
 
-::selection {
-  background: rgba(79, 157, 255, 0.35);
-  color: var(--aaos-fg);
+#kc-form-options,
+.form-actions,
+.pf-c-login__main-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+}
+
+::selection { background: rgba(79, 157, 255, 0.35); color: var(--aaos-fg); }
+
+/* ---------- RTL overrides ---------- */
+
+html[dir="rtl"] body,
+html[lang="ar"] body,
+body.rtl {
+  direction: rtl;
+  text-align: right;
+}
+
+html[dir="rtl"] #kc-social-providers h2::before { left: auto; right: 0; }
+html[dir="rtl"] #kc-social-providers h2::after  { right: auto; left: 0; }
+
+/* ---------- Mobile ---------- */
+
+@media (max-width: 480px) {
+  .card-pf, .pf-c-login__main {
+    margin: 12px !important;
+    padding: 22px 18px !important;
+    border-radius: 12px !important;
+  }
+  .login-pf-page-header, .pf-c-login__header { padding: 24px 12px 8px 12px; }
+  .login-pf-page-header h1, .pf-c-login__header h1 { font-size: 22px; }
+  #kc-header-wrapper, .pf-c-brand { font-size: 13px; padding: 8px 16px; }
 }
