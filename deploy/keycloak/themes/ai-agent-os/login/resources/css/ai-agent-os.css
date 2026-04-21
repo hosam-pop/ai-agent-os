@@ -235,25 +235,39 @@ a:hover { text-decoration: underline !important; }
 
 .alert,
 .pf-c-alert,
+.pf-v5-c-alert,
 #input-error,
 .kc-feedback-text,
-.pf-c-form__helper-text.pf-m-error {
-  display: block;
+span.kc-feedback-text,
+.pf-c-form__helper-text.pf-m-error,
+.pf-v5-c-helper-text .pf-m-error,
+.pf-v5-c-helper-text__item.pf-m-error,
+.pf-v5-c-helper-text__item-text.pf-m-error,
+.pf-v5-c-helper-text__item-text.kc-feedback-text,
+span.pf-v5-c-helper-text__item-text.pf-m-error {
+  display: block !important;
   border-radius: 10px !important;
   padding: 12px 14px !important;
   margin: 8px 0 !important;
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.4;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
 }
 
 .alert-error,
 .pf-c-alert.pf-m-danger,
 .pf-c-alert.pf-m-warning,
+.pf-v5-c-alert.pf-m-danger,
 #kc-content-wrapper .alert-error,
 .pf-m-error #input-error,
-.pf-c-form__helper-text.pf-m-error {
-  background: var(--aaos-danger-bg) !important;
+.pf-c-form__helper-text.pf-m-error,
+.pf-v5-c-helper-text .pf-m-error,
+.pf-v5-c-helper-text__item.pf-m-error,
+.pf-v5-c-helper-text__item-text.pf-m-error,
+.pf-v5-c-helper-text__item-text.kc-feedback-text,
+span.kc-feedback-text,
+span.pf-v5-c-helper-text__item-text.pf-m-error {
+  background-color: var(--aaos-danger-bg) !important;
   color: var(--aaos-danger-fg) !important;
   border: 1px solid var(--aaos-danger-border) !important;
 }
