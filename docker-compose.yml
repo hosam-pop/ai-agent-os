@@ -1,0 +1,293 @@
+# ==============================================================================
+# AI Agent OS — Unified Web Control Plane (self-host stack)
+#
+# This compose file brings up the full fleet for local / self-hosted use:
+#
+#   • Keycloak 26 + PostgreSQL           — central IAM (ai-agent-os realm)
+#   • AI Agent OS API Gateway (Fastify)  — JWT verification + upstream routing
+#   • LibreChat + MongoDB + Meilisearch  — primary chat UI (OIDC to Keycloak)
+#   • Mission Control (Next.js)          — orchestration dashboard
+#   • god-panel-nuxt                     — admin dashboard (custom Dockerfile)
+#   • Qualixar OS                        — advanced orchestration runtime
+#   • mcp-a2a-gateway (yw0nam/…)         — MCP ↔ A2A bridge
+#   • OpenFang ("Claw Bridge")           — external tool bridge
+#
+# PRODUCTION NOTE: Public deployment is split across separate Fly.io apps
+# (see deploy/fly/*.fly.toml). This compose file is for local development,
+# private self-hosting, and reproducing the topology end-to-end.
+#
+# Quick start (local):
+#   cp .env.stack.example .env.stack
+#   openssl rand -base64 32   # paste into KEYCLOAK_ADMIN_PASSWORD etc.
+#   docker compose --env-file .env.stack up -d
+#   # then: http://localhost:8080 (Keycloak), http://localhost:4000 (gateway),
+#   #       http://localhost:3080 (LibreChat)
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Keycloak identity provider + dedicated Postgres
+  # ----------------------------------------------------------------------------
+  keycloak-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    networks: [platform]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    command: ["start", "--optimized", "--import-realm"]
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_LOG_LEVEL: INFO
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      - ./deploy/keycloak/realm:/opt/keycloak/data/import:ro
+      - ./deploy/keycloak/themes/ai-agent-os:/opt/keycloak/themes/ai-agent-os:ro
+    networks: [platform]
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q 200"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  # ----------------------------------------------------------------------------
+  # Unified API Gateway (Fastify + JWT verification)
+  # ----------------------------------------------------------------------------
+  api-gateway:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.gateway
+    image: ai-agent-os-gateway:latest
+    restart: unless-stopped
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: 4000
+      GATEWAY_LOG_LEVEL: info
+      GATEWAY_REQUIRE_AUTH: "true"
+      GATEWAY_RATE_LIMIT_MAX: ${GATEWAY_RATE_LIMIT_MAX:-300}
+      GATEWAY_RATE_LIMIT_WINDOW: ${GATEWAY_RATE_LIMIT_WINDOW:-1 minute}
+      GATEWAY_CORS_ORIGINS: ${GATEWAY_CORS_ORIGINS:-}
+      KEYCLOAK_ISSUER: http://keycloak:8080/realms/ai-agent-os
+      KEYCLOAK_AUDIENCE: ai-agent-os-gateway
+      KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/ai-agent-os/protocol/openid-connect/certs
+      UPSTREAM_AI_AGENT_OS: http://ai-agent-os:3100
+      UPSTREAM_QUALIXAR: http://qualixar:3000
+      UPSTREAM_LIBRECHAT: http://librechat:3080
+      UPSTREAM_MISSION_CONTROL: http://mission-control:3000
+      UPSTREAM_GOD_PANEL: http://god-panel:3000
+      UPSTREAM_MCP_A2A_GATEWAY: http://mcp-a2a-gateway:10000
+      UPSTREAM_CLAW_BRIDGE: http://openfang:8765
+    ports:
+      - "${GATEWAY_PORT:-4000}:4000"
+    networks: [platform]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/livez"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  # ----------------------------------------------------------------------------
+  # AI Agent OS backend (headless HTTP shim running the existing agent runtime)
+  # ----------------------------------------------------------------------------
+  ai-agent-os:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: ai-agent-os:latest
+    restart: unless-stopped
+    environment:
+      DOGE_PROVIDER: ${DOGE_PROVIDER:-anthropic}
+      DOGE_MODEL: ${DOGE_MODEL:-claude-3-5-sonnet-latest}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DOGE_PERMISSION_MODE: ${DOGE_PERMISSION_MODE:-default}
+      DOGE_LOG_LEVEL: ${DOGE_LOG_LEVEL:-info}
+    networks: [platform]
+
+  # ----------------------------------------------------------------------------
+  # LibreChat + MongoDB + Meilisearch (OIDC via Keycloak)
+  # ----------------------------------------------------------------------------
+  librechat-mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - librechat-mongo-data:/data/db
+    networks: [platform]
+
+  librechat-meili:
+    image: getmeili/meilisearch:v1.7.3
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - librechat-meili-data:/meili_data
+    networks: [platform]
+
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest
+    restart: unless-stopped
+    depends_on:
+      - librechat-mongo
+      - librechat-meili
+      - keycloak
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3080
+      DOMAIN_CLIENT: ${LIBRECHAT_PUBLIC_URL:-http://localhost:3080}
+      DOMAIN_SERVER: ${LIBRECHAT_PUBLIC_URL:-http://localhost:3080}
+      MONGO_URI: mongodb://librechat-mongo:27017/LibreChat
+      MEILI_HOST: http://librechat-meili:7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+      # Disable all non-OIDC auth — SSO only.
+      ALLOW_EMAIL_LOGIN: "false"
+      ALLOW_REGISTRATION: "false"
+      ALLOW_SOCIAL_LOGIN: "true"
+      ALLOW_SOCIAL_REGISTRATION: "true"
+      # Keycloak OIDC
+      OPENID_CLIENT_ID: ai-agent-os-librechat
+      OPENID_CLIENT_SECRET: ${OPENID_CLIENT_SECRET_LIBRECHAT:?set OPENID_CLIENT_SECRET_LIBRECHAT}
+      OPENID_ISSUER: ${KEYCLOAK_PUBLIC_ISSUER:-http://localhost:8080/realms/ai-agent-os}
+      OPENID_SESSION_SECRET: ${OPENID_SESSION_SECRET:?set OPENID_SESSION_SECRET}
+      OPENID_SCOPE: "openid profile email"
+      OPENID_CALLBACK_URL: "/oauth/openid/callback"
+      OPENID_REQUIRED_ROLE: "agent-user"
+      OPENID_BUTTON_LABEL: "Sign in with AI Agent OS"
+      # Proxy agent calls through the unified gateway
+      CUSTOM_ENDPOINTS: "ai-agent-os"
+      # JWT / crypto
+      CREDS_KEY: ${LIBRECHAT_CREDS_KEY:?set LIBRECHAT_CREDS_KEY}
+      CREDS_IV: ${LIBRECHAT_CREDS_IV:?set LIBRECHAT_CREDS_IV}
+      JWT_SECRET: ${LIBRECHAT_JWT_SECRET:?set LIBRECHAT_JWT_SECRET}
+      JWT_REFRESH_SECRET: ${LIBRECHAT_JWT_REFRESH_SECRET:?set LIBRECHAT_JWT_REFRESH_SECRET}
+    volumes:
+      - ./deploy/librechat/librechat.yaml:/app/librechat.yaml:ro
+      - librechat-images:/app/client/public/images
+    ports:
+      - "${LIBRECHAT_PORT:-3080}:3080"
+    networks: [platform]
+
+  # ----------------------------------------------------------------------------
+  # Mission Control (builderz-labs/mission-control) — Next.js
+  # NOTE: upstream supports only basic auth; we put it behind the API gateway
+  # and bind to localhost only.
+  # ----------------------------------------------------------------------------
+  mission-control:
+    image: ghcr.io/builderz-labs/mission-control:latest
+    restart: unless-stopped
+    environment:
+      AUTH_USER: ${MISSION_CONTROL_USER:-admin}
+      AUTH_PASS: ${MISSION_CONTROL_PASS:?set MISSION_CONTROL_PASS}
+      NEXT_PUBLIC_API_URL: http://api-gateway:4000
+    networks: [platform]
+    # Only exposed on the internal network; access via gateway `/api/mission/*`.
+
+  # ----------------------------------------------------------------------------
+  # god-panel-nuxt — Vue/Nuxt admin dashboard
+  # NOTE: upstream uses its own JWT; we front it with Keycloak via the gateway.
+  # ----------------------------------------------------------------------------
+  god-panel:
+    build:
+      context: deploy/god-panel
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NITRO_PORT: 3000
+      NUXT_PUBLIC_API_BASE: http://api-gateway:4000
+      NUXT_PUBLIC_KEYCLOAK_URL: ${KEYCLOAK_PUBLIC_ISSUER:-http://localhost:8080/realms/ai-agent-os}
+      NUXT_PUBLIC_KEYCLOAK_CLIENT_ID: ai-agent-os-panel
+    networks: [platform]
+    # Access via gateway `/api/panel/*` (no direct public port).
+
+  # ----------------------------------------------------------------------------
+  # Qualixar OS (npx qualixar-os --mcp)
+  # ----------------------------------------------------------------------------
+  qualixar:
+    image: node:20-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npx --yes qualixar-os serve --port 3000"
+    environment:
+      NODE_ENV: production
+    networks: [platform]
+    volumes:
+      - qualixar-data:/app/.qualixar
+
+  # ----------------------------------------------------------------------------
+  # MCP ↔ A2A gateway (yw0nam/mcp_a2a_gateway)
+  # ----------------------------------------------------------------------------
+  mcp-a2a-gateway:
+    image: python:3.11-alpine
+    restart: unless-stopped
+    command: sh -c "pip install --no-cache-dir uv && MCP_TRANSPORT=streamable-http MCP_PORT=10000 MCP_HOST=0.0.0.0 uvx mcp-a2a-gateway"
+    networks: [platform]
+
+  # ----------------------------------------------------------------------------
+  # OpenFang / Claw Bridge (RightNow-AI/openfang) — Rust binary, HTTP adapter.
+  # Replace with your own built image when you have one; this is a placeholder
+  # that keeps the route wired up.
+  # ----------------------------------------------------------------------------
+  openfang:
+    image: alpine:3.20
+    restart: "no"
+    command: sh -c "echo 'openfang placeholder — build from https://github.com/RightNow-AI/openfang and replace this service'; sleep infinity"
+    networks: [platform]
+
+  # ----------------------------------------------------------------------------
+  # Edge TLS / reverse proxy (optional). Uncomment for production self-host.
+  # ----------------------------------------------------------------------------
+  # caddy:
+  #   image: caddy:2
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy-data:/data
+  #     - caddy-config:/config
+  #   networks: [platform]
+
+volumes:
+  keycloak-db-data:
+  librechat-mongo-data:
+  librechat-meili-data:
+  librechat-images:
+  qualixar-data:
+  # caddy-data:
+  # caddy-config:
+
+networks:
+  platform:
+    driver: bridge

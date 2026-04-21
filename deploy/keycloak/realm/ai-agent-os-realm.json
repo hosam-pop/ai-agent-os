@@ -1,0 +1,234 @@
+{
+  "realm": "ai-agent-os",
+  "enabled": true,
+  "displayName": "AI Agent OS",
+  "displayNameHtml": "<strong>AI Agent OS</strong>",
+  "loginTheme": "ai-agent-os",
+  "accountTheme": "keycloak.v3",
+  "adminTheme": "keycloak.v2",
+  "emailTheme": "keycloak",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "accessTokenLifespan": 900,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "accessCodeLifespanLogin": 1800,
+  "actionTokenGeneratedByAdminLifespan": 43200,
+  "actionTokenGeneratedByUserLifespan": 300,
+  "passwordPolicy": "length(12) and notUsername and notEmail and digits(1) and upperCase(1) and lowerCase(1) and specialChars(1) and passwordHistory(3)",
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA256",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "otpSupportedApplications": ["FreeOTP", "Google Authenticator", "Microsoft Authenticator"],
+  "webAuthnPolicyRpEntityName": "AI Agent OS",
+  "webAuthnPolicySignatureAlgorithms": ["ES256", "RS256"],
+  "webAuthnPolicyUserVerificationRequirement": "preferred",
+  "roles": {
+    "realm": [
+      { "name": "agent-admin", "description": "Full administrative access to the AI Agent OS platform" },
+      { "name": "agent-user", "description": "Standard user able to interact with the agent via chat and dashboards" },
+      { "name": "agent-service", "description": "Service account role for backend-to-backend calls" },
+      { "name": "agent-auditor", "description": "Read-only access to audit logs and observability dashboards" }
+    ]
+  },
+  "defaultRoles": ["agent-user"],
+  "defaultRole": {
+    "name": "default-roles-ai-agent-os",
+    "description": "Default role containing agent-user for all new users",
+    "composite": true,
+    "composites": {
+      "realm": ["agent-user"]
+    },
+    "clientRole": false
+  },
+  "groups": [
+    {
+      "name": "agent-admins",
+      "path": "/agent-admins",
+      "realmRoles": ["agent-admin", "agent-user", "agent-auditor"]
+    },
+    {
+      "name": "agent-users",
+      "path": "/agent-users",
+      "realmRoles": ["agent-user"]
+    },
+    {
+      "name": "agent-auditors",
+      "path": "/agent-auditors",
+      "realmRoles": ["agent-auditor", "agent-user"]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "ai-agent-os-audience",
+      "description": "Maps the audience claim to ai-agent-os-gateway",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "gateway-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "ai-agent-os-gateway",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "defaultDefaultClientScopes": [
+    "role_list",
+    "profile",
+    "email",
+    "roles",
+    "web-origins",
+    "acr",
+    "basic",
+    "ai-agent-os-audience"
+  ],
+  "defaultOptionalClientScopes": [
+    "offline_access",
+    "address",
+    "phone",
+    "microprofile-jwt"
+  ],
+  "clients": [
+    {
+      "clientId": "ai-agent-os-gateway",
+      "name": "AI Agent OS Unified Gateway",
+      "description": "Audience for JWTs accepted by the unified API gateway",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "access.token.lifespan": "900"
+      }
+    },
+    {
+      "clientId": "ai-agent-os-librechat",
+      "name": "LibreChat (chat UI)",
+      "description": "Primary chat interface for end users",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:3080/oauth/openid/callback",
+        "https://*.fly.dev/oauth/openid/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:3080",
+        "https://*.fly.dev"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+",
+        "access.token.lifespan": "1800"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email",
+        "ai-agent-os-audience"
+      ],
+      "optionalClientScopes": ["offline_access", "microprofile-jwt"]
+    },
+    {
+      "clientId": "ai-agent-os-panel",
+      "name": "god-panel Admin",
+      "description": "Admin dashboard (Nuxt)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "https://*.fly.dev/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "https://*.fly.dev"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "ai-agent-os-mission-control",
+      "name": "Mission Control Dashboard",
+      "description": "Agent orchestration dashboard",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:3001/*",
+        "https://*.fly.dev/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3001",
+        "https://*.fly.dev"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "smtpServer": {},
+  "eventsEnabled": true,
+  "eventsListeners": ["jboss-logging"],
+  "enabledEventTypes": [
+    "LOGIN",
+    "LOGIN_ERROR",
+    "LOGOUT",
+    "LOGOUT_ERROR",
+    "REGISTER",
+    "REGISTER_ERROR",
+    "UPDATE_PASSWORD",
+    "UPDATE_PROFILE",
+    "SEND_RESET_PASSWORD",
+    "RESET_PASSWORD",
+    "RESET_PASSWORD_ERROR",
+    "SEND_VERIFY_EMAIL",
+    "VERIFY_EMAIL",
+    "CUSTOM_REQUIRED_ACTION"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true
+}

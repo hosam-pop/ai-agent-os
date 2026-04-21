@@ -1,0 +1,78 @@
+# ============================================================================
+# Fly.io config — Keycloak 26 (AI Agent OS realm)
+#
+# Required secrets (set with `flyctl secrets set -a <app> KEY=value`):
+#   KEYCLOAK_ADMIN                   admin username
+#   KEYCLOAK_ADMIN_PASSWORD          32+ byte random password
+#   KC_DB_URL                        jdbc:postgresql://<fly-pg-host>:5432/keycloak
+#   KC_DB_USERNAME
+#   KC_DB_PASSWORD
+#
+# Volume: fly volumes create keycloak_data --size 5 --region iad
+# Postgres: fly postgres create --name ai-agent-os-keycloak-db --region iad
+# ============================================================================
+
+app = "ai-agent-os-keycloak"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  image = "quay.io/keycloak/keycloak:26.0"
+
+[deploy]
+  strategy = "rolling"
+
+[env]
+  KC_HTTP_ENABLED = "true"
+  KC_HOSTNAME_STRICT = "false"
+  KC_HOSTNAME = "ai-agent-os-keycloak.fly.dev"
+  KC_PROXY_HEADERS = "xforwarded"
+  KC_HEALTH_ENABLED = "true"
+  KC_METRICS_ENABLED = "true"
+  KC_LOG_LEVEL = "INFO"
+  KC_CACHE = "ispn"
+
+# Import realm + mount the AI Agent OS theme on startup. Fly cannot bake the
+# realm file into the upstream image, so we mount it via a volume populated
+# at deploy time (see `flyctl deploy --build-only && flyctl ssh sftp` flow in
+# docs/DEPLOYMENT_ARCHITECTURE.md) OR build a derived image locally.
+processes = { app = "start --optimized --import-realm" }
+
+[[mounts]]
+  source = "keycloak_data"
+  destination = "/opt/keycloak/data"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "requests"
+    hard_limit = 400
+    soft_limit = 300
+
+  [[services.http_checks]]
+    interval = "20s"
+    timeout = "5s"
+    grace_period = "60s"
+    method = "get"
+    path = "/health/ready"
+    protocol = "http"
+    tls_skip_verify = false
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2048mb"

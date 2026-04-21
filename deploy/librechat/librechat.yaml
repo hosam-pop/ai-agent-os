@@ -1,0 +1,34 @@
+# =============================================================================
+# LibreChat configuration — wired to the unified API gateway as a custom
+# OpenAI-compatible endpoint. The gateway enforces Keycloak JWT verification
+# before forwarding to the ai-agent-os backend.
+# =============================================================================
+
+version: 1.2.1
+cache: true
+
+interface:
+  privacyPolicy:
+    externalUrl: 'https://example.invalid/privacy'
+    openNewTab: true
+  termsOfService:
+    externalUrl: 'https://example.invalid/terms'
+    openNewTab: true
+
+registration:
+  socialLogins: ['openid']
+
+endpoints:
+  custom:
+    - name: 'AI Agent OS'
+      apiKey: '${OPENID_CLIENT_SECRET_LIBRECHAT}'
+      baseURL: 'http://api-gateway:4000/api/agent/v1'
+      models:
+        default: ['ai-agent-os']
+        fetch: false
+      titleConvo: true
+      titleMethod: 'completion'
+      summarize: false
+      modelDisplayLabel: 'AI Agent OS'
+      forcePrompt: false
+      iconURL: 'https://raw.githubusercontent.com/hosam-pop/ai-agent-os/devin/initial-import/docs/brand/logo.png'

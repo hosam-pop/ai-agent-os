@@ -1,0 +1,64 @@
+# ============================================================================
+# Fly.io config — AI Agent OS Unified API Gateway (Fastify + JWT verification)
+#
+# Required secrets (flyctl secrets set -a ai-agent-os-gateway KEY=value):
+#   KEYCLOAK_ISSUER                 https://ai-agent-os-keycloak.fly.dev/realms/ai-agent-os
+#   KEYCLOAK_AUDIENCE               ai-agent-os-gateway
+#   UPSTREAM_AI_AGENT_OS            https://ai-agent-os-backend.fly.dev  (optional)
+#   UPSTREAM_LIBRECHAT              https://ai-agent-os-librechat.fly.dev
+#   GATEWAY_CORS_ORIGINS            https://ai-agent-os-librechat.fly.dev
+# ============================================================================
+
+app = "ai-agent-os-gateway"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "10s"
+
+[build]
+  dockerfile = "../../deploy/docker/Dockerfile.gateway"
+
+[deploy]
+  strategy = "rolling"
+
+[env]
+  NODE_ENV = "production"
+  GATEWAY_HOST = "0.0.0.0"
+  GATEWAY_PORT = "4000"
+  GATEWAY_LOG_LEVEL = "info"
+  GATEWAY_REQUIRE_AUTH = "true"
+  GATEWAY_RATE_LIMIT_MAX = "300"
+  GATEWAY_RATE_LIMIT_WINDOW = "1 minute"
+  GATEWAY_TRUST_PROXY = "true"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 4000
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "requests"
+    hard_limit = 500
+    soft_limit = 350
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "30s"
+    method = "get"
+    path = "/livez"
+    protocol = "http"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
