@@ -53,9 +53,20 @@ registration:
 # as `user_provided` and asks the individual user for their own token.
 # -----------------------------------------------------------------------------
 webSearch:
+  # Primary search provider is our self-hosted SearXNG (deploy/fly/searxng.fly.toml).
+  # It exposes a JSON API at the internal 6PN address `ai-agent-os-searxng.internal`
+  # and public HTTPS at https://ai-agent-os-searxng.fly.dev. The LibreChat web
+  # search middleware posts `/search?format=json` under the hood.
+  searchProvider: 'searxng'
+  searxngInstanceUrl: '${SEARXNG_INSTANCE_URL}'
+  searxngApiKey: '${SEARXNG_API_KEY}'
+  # Optional commercial providers — kept as env-var refs so they light up the
+  # moment the user drops a key into Fly secrets.
   serperApiKey: '${SERPER_API_KEY}'
-  jinaApiKey: '${JINA_API_KEY}'
   firecrawlApiKey: '${FIRECRAWL_API_KEY}'
+  firecrawlApiUrl: '${FIRECRAWL_API_URL}'
+  jinaApiKey: '${JINA_API_KEY}'
+  cohereApiKey: '${COHERE_API_KEY}'
   safeSearch: 1
 
 fileConfig:

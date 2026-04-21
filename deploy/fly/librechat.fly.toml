@@ -46,6 +46,10 @@ kill_timeout = "10s"
   OPENID_REQUIRED_ROLE_TOKEN_KIND = "access"
   OPENID_REQUIRED_ROLE_PARAMETER_PATH = "realm_access.roles"
   OPENID_BUTTON_LABEL = "Sign in with AI Agent OS"
+  # Point agents' web_search capability at our self-hosted SearXNG app. The
+  # public URL works over the Fly edge; internal 6PN would be slightly faster
+  # but requires both apps to stay in the same region family.
+  SEARXNG_INSTANCE_URL = "https://ai-agent-os-searxng.fly.dev"
 
 [[services]]
   protocol = "tcp"

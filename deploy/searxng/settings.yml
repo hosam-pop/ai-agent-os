@@ -1,0 +1,47 @@
+# Minimal SearXNG config for ai-agent-os. Inherits everything from upstream
+# defaults and only overrides what LibreChat needs (JSON API) plus runtime
+# secret_key (patched by the entrypoint wrapper).
+#
+# When `use_default_settings` is true, any top-level `engines:` list is
+# IGNORED; to enable/disable specific engines you must use
+# `use_default_settings.engines.remove` / `.keep_only`.
+use_default_settings:
+  engines:
+    # Some engines probe their upstream during init (wikidata hits SPARQL,
+    # currency hits a rate host). On Fly Machines that warm-up has been flaky
+    # with httpcore.ReadError, so we remove them. Everything else (google,
+    # duckduckgo, bing, brave, startpage, github, reddit, arxiv, hackernews,
+    # wikipedia ...) stays on the upstream defaults.
+    remove:
+      - wikidata
+      - currency
+
+general:
+  instance_name: "AI Agent OS Search"
+  contact_url: false
+  donation_url: false
+  privacypolicy_url: false
+  enable_metrics: false
+
+server:
+  # secret_key is patched at boot from SEARXNG_SECRET (see searxng-entrypoint.sh)
+  secret_key: "placeholder-overridden-at-runtime"
+  limiter: false
+  image_proxy: false
+  public_instance: false
+
+search:
+  safe_search: 1
+  formats:
+    - html
+    - json
+
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 20.0
+  pool_connections: 100
+  pool_maxsize: 20
+  enable_http2: true
+
+ui:
+  static_use_hash: true
