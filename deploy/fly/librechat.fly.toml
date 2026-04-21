@@ -21,7 +21,9 @@ kill_timeout = "10s"
   # Custom image that bundles /app/librechat.yaml so agent tooling, role
   # permissions, and custom endpoints ship with every deploy. See
   # deploy/docker/Dockerfile.librechat for what we layer on top of upstream.
-  dockerfile = "deploy/docker/Dockerfile.librechat"
+  # Paths are resolved relative to this fly.toml; `../../` points back to the
+  # repo root so the Dockerfile's `COPY deploy/...` lines work.
+  dockerfile = "../../deploy/docker/Dockerfile.librechat"
 
 [deploy]
   strategy = "rolling"

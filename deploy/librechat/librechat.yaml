@@ -25,9 +25,10 @@ interface:
   termsOfService:
     externalUrl: 'https://example.invalid/terms'
     openNewTab: true
-  # admin-only tabs / builders
-  agents: false
-  prompts: false
+  # Global toggles — enable everything; per-role restrictions live below in
+  # `permissions` (USER role is locked down, ADMIN keeps full access).
+  agents: true
+  prompts: true
   bookmarks: true
   multiConvo: true
   presets: true
@@ -36,6 +37,12 @@ interface:
   modelSelect: true
   runCode: true
   webSearch: true
+
+# Role-based `permissions` key was removed — this LibreChat release does not
+# recognize it in yaml (Zod rejects the schema). Registration is disabled, so
+# only OIDC-provisioned users exist. Admin-only lockdown for future USER-role
+# accounts will be enforced via MongoDB post-boot (promote admin, restrict USER
+# role docs in the `Role` collection).
 
 registration:
   socialLogins: ['openid']
@@ -96,37 +103,10 @@ endpoints:
       - 'chain'
       - 'web_search'
 
-  openAI:
-    apiKey: '${OPENAI_API_KEY}'
-    models:
-      default: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'o3-mini']
-      fetch: true
-    titleConvo: true
-    titleModel: 'gpt-4o-mini'
-
-  anthropic:
-    apiKey: '${ANTHROPIC_API_KEY}'
-    models:
-      default:
-        - 'claude-sonnet-4-5-20250929'
-        - 'claude-opus-4-1-20250805'
-        - 'claude-3-5-sonnet-20241022'
-        - 'claude-3-5-haiku-20241022'
-      fetch: true
-    titleConvo: true
-    titleModel: 'claude-3-5-haiku-20241022'
-
-  google:
-    apiKey: '${GOOGLE_KEY}'
-    models:
-      default:
-        - 'gemini-2.5-flash'
-        - 'gemini-2.5-pro'
-        - 'gemini-1.5-flash'
-        - 'gemini-1.5-pro'
-      fetch: true
-    titleConvo: true
-    titleModel: 'gemini-2.5-flash'
+  # First-class endpoints (openAI, anthropic, google) are auto-enabled by the
+  # presence of their env-level API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY,
+  # GOOGLE_KEY). No yaml block is needed — adding one here forces a Zod schema
+  # that differs per version and crashes boot. Keep them env-driven.
 
   # Custom OpenAI-compatible endpoint that forwards to our API Gateway. The
   # gateway enforces Keycloak JWT verification before routing to the ai-agent
@@ -187,15 +167,14 @@ endpoints:
       modelDisplayLabel: 'Mistral'
 
 # -----------------------------------------------------------------------------
-# MCP servers exposed to agents. `key-manager` is our custom server (Phase B)
-# that lets an agent dynamically store/fetch API keys per purpose. The server
-# is deployed as a sidecar Fly app; its URL is injected via Fly secrets.
+# MCP servers exposed to agents. The `key-manager` server (Phase B) will be
+# added once it is deployed as a sidecar; leaving it unset here avoids boot-
+# time "Invalid URL" crashes when the secret is not yet configured.
 # -----------------------------------------------------------------------------
-mcpServers:
-  key-manager:
-    type: streamable-http
-    url: '${KEY_MANAGER_MCP_URL}'
-    timeout: 30000
-    headers:
-      Authorization: 'Bearer ${KEY_MANAGER_MCP_TOKEN}'
-      X-User-Email: '{{LIBRECHAT_USER_EMAIL}}'
+# mcpServers:
+#   key-manager:
+#     type: streamable-http
+#     url: '${KEY_MANAGER_MCP_URL}'
+#     timeout: 30000
+#     headers:
+#       Authorization: 'Bearer ${KEY_MANAGER_MCP_TOKEN}'
