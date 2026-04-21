@@ -35,6 +35,11 @@ kill_timeout = "10s"
   OPENID_SCOPE = "openid profile email"
   OPENID_CALLBACK_URL = "/oauth/openid/callback"
   OPENID_REQUIRED_ROLE = "agent-user"
+  # Role claim lives in the access token at `realm_access.roles` for Keycloak.
+  # Without these two vars, LibreChat logs `Key 'undefined' not found in undefined token!`
+  # and every OIDC callback fails with "Authentication failed".
+  OPENID_REQUIRED_ROLE_TOKEN_KIND = "access"
+  OPENID_REQUIRED_ROLE_PARAMETER_PATH = "realm_access.roles"
   OPENID_BUTTON_LABEL = "Sign in with AI Agent OS"
 
 [[services]]
