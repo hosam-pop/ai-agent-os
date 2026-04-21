@@ -152,6 +152,48 @@ const EnvSchema = z.object({
   OSV_URL: z.string().url().optional(),
 
   ATOMIC_RED_TEAM_PATH: z.string().optional(),
+
+  // Enterprise integrations (feat/enterprise-integrations-real)
+  DOGE_FEATURE_COMPOSIO: z.coerce.boolean().default(false),
+  DOGE_FEATURE_ARCADE: z.coerce.boolean().default(false),
+  DOGE_FEATURE_IRON_CURTAIN: z.coerce.boolean().default(false),
+  DOGE_FEATURE_KAVACH: z.coerce.boolean().default(false),
+  DOGE_FEATURE_LANGFUSE: z.coerce.boolean().default(false),
+  DOGE_FEATURE_POSTHOG: z.coerce.boolean().default(false),
+  DOGE_FEATURE_OPENLIT: z.coerce.boolean().default(false),
+  DOGE_FEATURE_AGENTWATCH: z.coerce.boolean().default(false),
+  DOGE_FEATURE_AGENTEST: z.coerce.boolean().default(false),
+  DOGE_FEATURE_TOOL_DISCOVERY: z.coerce.boolean().default(false),
+
+  COMPOSIO_API_KEY: z.string().optional(),
+  COMPOSIO_BASE_URL: z.string().url().optional(),
+  COMPOSIO_USER_ID: z.string().optional(),
+
+  ARCADE_API_KEY: z.string().optional(),
+  ARCADE_BASE_URL: z.string().url().optional(),
+  ARCADE_USER_ID: z.string().optional(),
+
+  KAVACH_SIGNING_KEY: z.string().optional(),
+  KAVACH_ISSUER: z.string().optional(),
+
+  LANGFUSE_PUBLIC_KEY: z.string().optional(),
+  LANGFUSE_SECRET_KEY: z.string().optional(),
+  LANGFUSE_BASE_URL: z.string().url().optional(),
+
+  POSTHOG_API_KEY: z.string().optional(),
+  POSTHOG_HOST: z.string().url().optional(),
+  POSTHOG_DISTINCT_ID: z.string().optional(),
+
+  OPENLIT_APPLICATION_NAME: z.string().optional(),
+  OPENLIT_ENVIRONMENT: z.string().optional(),
+  OPENLIT_OTLP_ENDPOINT: z.string().optional(),
+  OPENLIT_OTLP_HEADERS: z.string().optional(),
+
+  AGENTWATCH_ENDPOINT: z.string().url().optional(),
+  AGENTWATCH_API_KEY: z.string().optional(),
+  AGENTWATCH_SERVICE_NAME: z.string().optional(),
+
+  AGENTEST_API_KEY: z.string().optional(),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;
