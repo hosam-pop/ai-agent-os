@@ -35,11 +35,17 @@ const GatewayEnvSchema = z.object({
   GATEWAY_TRUST_PROXY: z.coerce.boolean().default(true),
   GATEWAY_REQUIRE_AUTH: z.coerce.boolean().default(true),
 
-  // Admin keys panel (/admin/keys)
+  // Admin keys panel (/admin/keys) — SSO-gated via Keycloak ROPC + service account.
   KEYS_MASTER_KEY: z.string().optional(),
-  KEYS_ADMIN_PASSWORD: z.string().optional(),
   KEYS_STORE_PATH: z.string().optional(),
+  KEYS_POLICIES_PATH: z.string().optional(),
   KEYS_COOKIE_SECURE: z.coerce.boolean().default(true),
+  KEYS_REQUIRED_ROLE: z.string().default('agent-admin'),
+  KEYCLOAK_ADMIN_BRIDGE_CLIENT_ID: z.string().optional(),
+  KEYCLOAK_ADMIN_BRIDGE_SECRET: z.string().optional(),
+  // Legacy break-glass password from before SSO; ignored when set, kept here so
+  // existing Fly secrets don't fail validation. Will be removed in a follow-up.
+  KEYS_ADMIN_PASSWORD: z.string().optional(),
 });
 
 export type GatewayEnv = z.infer<typeof GatewayEnvSchema>;

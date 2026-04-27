@@ -98,9 +98,13 @@ export async function buildGateway(opts: GatewayOptions = {}): Promise<FastifyIn
 
   await registerAdminKeysRoutes(app, {
     masterKey: env.KEYS_MASTER_KEY,
-    adminPassword: env.KEYS_ADMIN_PASSWORD,
+    keycloakIssuer: env.KEYCLOAK_ISSUER,
+    keycloakAdminClientId: env.KEYCLOAK_ADMIN_BRIDGE_CLIENT_ID,
+    keycloakAdminClientSecret: env.KEYCLOAK_ADMIN_BRIDGE_SECRET,
     storePath: env.KEYS_STORE_PATH,
+    policiesPath: env.KEYS_POLICIES_PATH,
     secureCookie: env.KEYS_COOKIE_SECURE,
+    requiredRole: env.KEYS_REQUIRED_ROLE,
   });
 
   return app;

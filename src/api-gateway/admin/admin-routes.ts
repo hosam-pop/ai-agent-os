@@ -1,51 +1,70 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { AdminAuth, buildAdminAuth } from './admin-auth.js';
+import { AdminAuth, AdminSession, buildAdminAuth } from './admin-auth.js';
 import { renderAdminKeysPage } from './admin-page.js';
+import { KeycloakAdmin } from './keycloak-admin.js';
 import { createFileKeysStore, KeysStore, toPublicStatus } from './keys-store.js';
+import { CAPABILITIES, createFilePoliciesStore, PolicyDocument } from './policies-store.js';
 import { findProvider, PROVIDERS } from './providers.js';
 
 export interface AdminKeysRoutesOptions {
   // Master encryption key. Required to enable the panel.
   masterKey: string | undefined;
-  // Plaintext admin password. Required to enable the panel.
-  adminPassword: string | undefined;
-  // Path to the encrypted JSON store. Defaults to /data/admin-keys.json so it
-  // lives on a Fly volume when one is attached.
+  // Keycloak issuer URL (used both for ROPC login + admin REST calls).
+  keycloakIssuer: string | undefined;
+  // Confidential client used for ROPC + service-account admin calls.
+  keycloakAdminClientId: string | undefined;
+  keycloakAdminClientSecret: string | undefined;
+  // Path to the encrypted JSON store. Defaults to /data/admin-keys.json.
   storePath?: string;
+  // Path to the agent-policy JSON. Defaults to /data/admin-policies.json.
+  policiesPath?: string;
   // Whether to set the Secure flag on session cookies. Defaults to true.
   secureCookie?: boolean;
+  // Realm role required to use the panel. Defaults to 'agent-admin'.
+  requiredRole?: string;
 }
 
 const DEFAULT_STORE_PATH = '/data/admin-keys.json';
+const DEFAULT_POLICIES_PATH = '/data/admin-policies.json';
 
 export async function registerAdminKeysRoutes(
   app: FastifyInstance,
   opts: AdminKeysRoutesOptions,
 ): Promise<void> {
   const masterKey = opts.masterKey;
-  const adminPassword = opts.adminPassword;
-  if (!masterKey || !adminPassword) {
-    app.log.warn('admin keys panel disabled (set KEYS_MASTER_KEY and KEYS_ADMIN_PASSWORD to enable)');
+  const issuer = opts.keycloakIssuer;
+  const adminClientId = opts.keycloakAdminClientId;
+  const adminClientSecret = opts.keycloakAdminClientSecret;
+
+  if (!masterKey || !issuer || !adminClientId || !adminClientSecret) {
+    app.log.warn(
+      'admin keys panel disabled (set KEYS_MASTER_KEY + KEYCLOAK_ISSUER + KEYCLOAK_ADMIN_BRIDGE_CLIENT_ID + KEYCLOAK_ADMIN_BRIDGE_SECRET to enable)',
+    );
     app.get('/admin/keys', async (_req, reply) => {
       reply.code(503).type('text/html').send(renderDisabledPage());
     });
     return;
   }
 
+  const keycloak = new KeycloakAdmin({
+    issuer,
+    clientId: adminClientId,
+    clientSecret: adminClientSecret,
+  });
   const auth = buildAdminAuth({
-    password: adminPassword,
     sessionKey: masterKey,
+    keycloak,
     secureCookie: opts.secureCookie ?? true,
+    requiredRole: opts.requiredRole ?? 'agent-admin',
   });
   const store = createFileKeysStore({
     filePath: opts.storePath ?? DEFAULT_STORE_PATH,
     masterKey,
   });
+  const policies = createFilePoliciesStore(opts.policiesPath ?? DEFAULT_POLICIES_PATH);
 
-  // The admin page ships with inline <style> and <script> blocks, plus the
-  // Cairo font from Google Fonts. The default gateway CSP (default-src 'self')
-  // would block all of them and render the page as plain text. Override the
-  // CSP for this route only — the rest of the gateway keeps the strict policy.
+  // Allow inline <style>, <script>, Cairo from Google Fonts only on /admin/keys.
+  // Every other route keeps the strict default-src 'self' policy.
   const adminPageCsp = [
     "default-src 'self'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
@@ -64,22 +83,40 @@ export async function registerAdminKeysRoutes(
       .type('text/html')
       .header('cache-control', 'no-store, max-age=0')
       .header('Content-Security-Policy', adminPageCsp)
-      .send(renderAdminKeysPage({ signedIn: session.ok }));
+      .send(
+        renderAdminKeysPage({
+          signedIn: session.ok,
+          username: session.session?.username,
+          email: session.session?.email,
+        }),
+      );
   });
 
-  // POST /admin/keys/api/login — exchange the admin password for a session cookie.
+  // POST /admin/keys/api/login — username + password -> session cookie
   app.post('/admin/keys/api/login', async (req, reply) => {
     const body = parseJSONBody(req);
+    const username = typeof body.username === 'string' ? body.username.trim() : '';
     const password = typeof body.password === 'string' ? body.password : '';
-    if (!password) {
-      return reply.code(400).send({ error: 'invalid_request', message: 'password is required' });
+    if (!username || !password) {
+      return reply.code(400).send({ error: 'invalid_request', message: 'username and password are required' });
     }
-    if (!auth.verifyPassword(password)) {
-      return reply.code(401).send({ error: 'unauthorized', message: 'wrong password' });
+    const outcome = await auth.loginWithPassword(username, password);
+    if (!outcome.ok || !outcome.session) {
+      return reply.code(outcome.status ?? 401).send({
+        error: outcome.status === 403 ? 'forbidden' : 'unauthorized',
+        message: outcome.reason ?? 'login failed',
+      });
     }
-    const sess = auth.issueSession();
-    auth.setSessionCookie(reply, sess.token);
-    reply.send({ ok: true, expiresAt: sess.expiresAt });
+    auth.setSessionCookie(reply, outcome.session);
+    reply.send({
+      ok: true,
+      expiresAt: outcome.session.expiresAt,
+      session: {
+        username: outcome.session.username,
+        email: outcome.session.email,
+        roles: outcome.session.roles,
+      },
+    });
   });
 
   app.post('/admin/keys/api/logout', async (_req, reply) => {
@@ -96,11 +133,13 @@ export async function registerAdminKeysRoutes(
     if (!session.ok) {
       return reply.code(401).send({ error: 'unauthorized', message: session.reason ?? 'login required' });
     }
+    (req as FastifyRequest & { adminSession?: AdminSession }).adminSession = session.session;
   });
 
+  // ------- API keys CRUD -------
   app.get('/admin/keys/api/list', async (_req, reply) => {
     const items = await Promise.all(
-      PROVIDERS.map(async (p) => {
+      PROVIDERS.map(async p => {
         const rec = await store.get(p.id);
         return {
           id: p.id,
@@ -129,11 +168,9 @@ export async function registerAdminKeysRoutes(
     if (validationError) {
       return reply.code(400).send({ error: 'invalid_value', message: validationError });
     }
-    const rec = await store.set(provider.id, value, 'admin');
-    reply.send({
-      ok: true,
-      status: toPublicStatus(rec, provider.id, masterKey),
-    });
+    const session = (req as FastifyRequest & { adminSession?: AdminSession }).adminSession;
+    const rec = await store.set(provider.id, value, session?.username ?? 'admin');
+    reply.send({ ok: true, status: toPublicStatus(rec, provider.id, masterKey) });
   });
 
   app.delete('/admin/keys/api/:provider', async (req, reply) => {
@@ -143,10 +180,7 @@ export async function registerAdminKeysRoutes(
       return reply.code(404).send({ error: 'not_found', message: `unknown provider: ${id}` });
     }
     await store.delete(provider.id);
-    reply.send({
-      ok: true,
-      status: toPublicStatus(null, provider.id, masterKey),
-    });
+    reply.send({ ok: true, status: toPublicStatus(null, provider.id, masterKey) });
   });
 
   app.post('/admin/keys/api/:provider/test', async (req, reply) => {
@@ -157,16 +191,11 @@ export async function registerAdminKeysRoutes(
     }
     const value = await store.decrypt(provider.id);
     if (!value) {
-      return reply
-        .code(400)
-        .send({ error: 'no_key', message: 'no key stored for this provider' });
+      return reply.code(400).send({ error: 'no_key', message: 'no key stored for this provider' });
     }
     if (!provider.testKey) {
       const status = await store.recordTest(provider.id, { ok: true, note: 'no live test available' });
-      return reply.send({
-        ok: true,
-        status: toPublicStatus(status, provider.id, masterKey),
-      });
+      return reply.send({ ok: true, status: toPublicStatus(status, provider.id, masterKey) });
     }
     let result: { ok: boolean; note: string };
     try {
@@ -175,13 +204,147 @@ export async function registerAdminKeysRoutes(
       result = { ok: false, note: (err as Error).message.slice(0, 200) };
     }
     const rec = await store.recordTest(provider.id, result);
+    reply.send({ ok: result.ok, status: toPublicStatus(rec, provider.id, masterKey) });
+  });
+
+  // ------- Account (current admin) -------
+  app.get('/admin/keys/api/account', async (req, reply) => {
+    const session = (req as FastifyRequest & { adminSession?: AdminSession }).adminSession!;
     reply.send({
-      ok: result.ok,
-      status: toPublicStatus(rec, provider.id, masterKey),
+      userId: session.userId,
+      username: session.username,
+      email: session.email,
+      roles: session.roles,
+      expiresAt: session.expiresAt,
     });
   });
 
-  app.log.info({ providers: PROVIDERS.length }, 'admin keys panel registered at /admin/keys');
+  app.post('/admin/keys/api/account/password', async (req, reply) => {
+    const session = (req as FastifyRequest & { adminSession?: AdminSession }).adminSession!;
+    const body = parseJSONBody(req);
+    const current = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+    const next = typeof body.newPassword === 'string' ? body.newPassword : '';
+    if (!current || !next) {
+      return reply.code(400).send({ error: 'invalid_request', message: 'currentPassword and newPassword are required' });
+    }
+    // Re-verify current password before allowing reset.
+    const verify = await auth.loginWithPassword(session.username, current);
+    if (!verify.ok) {
+      return reply.code(401).send({ error: 'unauthorized', message: 'current password is wrong' });
+    }
+    try {
+      await keycloak.resetPassword(session.userId, next, false);
+    } catch (err) {
+      return reply.code(400).send({ error: 'reset_failed', message: (err as Error).message });
+    }
+    reply.send({ ok: true });
+  });
+
+  // ------- Users CRUD (Keycloak Admin REST) -------
+  app.get('/admin/keys/api/users', async (req, reply) => {
+    try {
+      const users = await keycloak.listUsers({ max: 100 });
+      reply.send({ users });
+    } catch (err) {
+      reply.code(502).send({ error: 'keycloak_error', message: (err as Error).message });
+    }
+  });
+
+  app.post('/admin/keys/api/users', async (req, reply) => {
+    const body = parseJSONBody(req);
+    const username = typeof body.username === 'string' ? body.username.trim() : '';
+    const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    const firstName = typeof body.firstName === 'string' ? body.firstName : undefined;
+    const lastName = typeof body.lastName === 'string' ? body.lastName : undefined;
+    const grantAdmin = body.grantAdmin === true;
+    const temporary = body.temporary === true;
+    if (!username || !password) {
+      return reply.code(400).send({ error: 'invalid_request', message: 'username and password are required' });
+    }
+    try {
+      const user = await keycloak.createUser({
+        username,
+        email: email || undefined,
+        firstName,
+        lastName,
+        password,
+        temporary,
+        realmRoles: grantAdmin ? ['agent-admin', 'agent-user'] : ['agent-user'],
+      });
+      reply.send({ ok: true, user });
+    } catch (err) {
+      reply.code(400).send({ error: 'create_failed', message: (err as Error).message });
+    }
+  });
+
+  app.delete('/admin/keys/api/users/:userId', async (req, reply) => {
+    const session = (req as FastifyRequest & { adminSession?: AdminSession }).adminSession!;
+    const userId = (req.params as { userId?: string }).userId ?? '';
+    if (!userId) {
+      return reply.code(400).send({ error: 'invalid_request', message: 'userId required' });
+    }
+    if (userId === session.userId) {
+      return reply.code(400).send({ error: 'self_delete_blocked', message: 'cannot delete your own account from the panel' });
+    }
+    try {
+      await keycloak.deleteUser(userId);
+      reply.send({ ok: true });
+    } catch (err) {
+      reply.code(502).send({ error: 'keycloak_error', message: (err as Error).message });
+    }
+  });
+
+  app.post('/admin/keys/api/users/:userId/password', async (req, reply) => {
+    const userId = (req.params as { userId?: string }).userId ?? '';
+    const body = parseJSONBody(req);
+    const password = typeof body.password === 'string' ? body.password : '';
+    const temporary = body.temporary === true;
+    if (!userId || !password) {
+      return reply.code(400).send({ error: 'invalid_request', message: 'userId and password required' });
+    }
+    try {
+      await keycloak.resetPassword(userId, password, temporary);
+      reply.send({ ok: true });
+    } catch (err) {
+      reply.code(400).send({ error: 'reset_failed', message: (err as Error).message });
+    }
+  });
+
+  app.post('/admin/keys/api/users/:userId/roles', async (req, reply) => {
+    const userId = (req.params as { userId?: string }).userId ?? '';
+    const body = parseJSONBody(req);
+    const grant = Array.isArray(body.grant) ? body.grant.filter((s): s is string => typeof s === 'string') : [];
+    const revoke = Array.isArray(body.revoke) ? body.revoke.filter((s): s is string => typeof s === 'string') : [];
+    try {
+      if (grant.length > 0) await keycloak.assignRealmRoles(userId, grant);
+      if (revoke.length > 0) await keycloak.removeRealmRoles(userId, revoke);
+      reply.send({ ok: true });
+    } catch (err) {
+      reply.code(400).send({ error: 'role_update_failed', message: (err as Error).message });
+    }
+  });
+
+  // ------- Agent permissions -------
+  app.get('/admin/keys/api/policies', async (_req, reply) => {
+    const doc = await policies.load();
+    reply.send({ capabilities: CAPABILITIES, policy: doc });
+  });
+
+  app.put('/admin/keys/api/policies', async (req, reply) => {
+    const body = parseJSONBody(req);
+    const incoming = body.policy as PolicyDocument | undefined;
+    if (!incoming || incoming.version !== 1 || !Array.isArray(incoming.agents)) {
+      return reply.code(400).send({ error: 'invalid_request', message: 'expected { policy: { version: 1, agents: [...] } }' });
+    }
+    const saved = await policies.save(incoming);
+    reply.send({ ok: true, policy: saved });
+  });
+
+  app.log.info(
+    { providers: PROVIDERS.length, capabilities: CAPABILITIES.length },
+    'admin keys panel registered at /admin/keys (SSO-gated)',
+  );
 }
 
 function parseJSONBody(req: FastifyRequest): Record<string, unknown> {
@@ -192,16 +355,23 @@ function parseJSONBody(req: FastifyRequest): Record<string, unknown> {
 }
 
 function renderDisabledPage(): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>API Keys disabled</title>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><title>Admin panel disabled</title>
 <style>
   html,body{margin:0;padding:0;background:#0b0f17;color:#f2f6fc;font-family:system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
-  .card{max-width:520px;padding:32px;border:1px solid #29334a;border-radius:18px;background:#141a26;text-align:center}
+  .card{max-width:560px;padding:32px;border:1px solid #29334a;border-radius:18px;background:#141a26;text-align:center}
   h1{margin:0 0 12px;font-size:20px}
-  code{background:#1a2230;padding:2px 6px;border-radius:6px;border:1px solid #29334a}
+  code{background:#1a2230;padding:2px 6px;border-radius:6px;border:1px solid #29334a;font-size:12px}
   p{color:#a4adc1;line-height:1.6}
+  ul{text-align:left;color:#a4adc1;line-height:1.8;font-size:14px}
 </style></head><body><main class="card">
-<h1>API Keys panel disabled</h1>
-<p>Set the <code>KEYS_MASTER_KEY</code> and <code>KEYS_ADMIN_PASSWORD</code> Fly secrets on the gateway and redeploy to enable this page.</p>
+<h1>Admin panel disabled</h1>
+<p>The following Fly secrets are required to enable this page:</p>
+<ul>
+<li><code>KEYS_MASTER_KEY</code> — 32-byte hex master key for AES-256-GCM</li>
+<li><code>KEYCLOAK_ISSUER</code> — e.g. https://kc.example.com/realms/ai-agent-os</li>
+<li><code>KEYCLOAK_ADMIN_BRIDGE_CLIENT_ID</code> — confidential client with directAccessGrants + serviceAccounts</li>
+<li><code>KEYCLOAK_ADMIN_BRIDGE_SECRET</code> — that client's secret</li>
+</ul>
 </main></body></html>`;
 }
 
