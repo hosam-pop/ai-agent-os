@@ -31,18 +31,25 @@ export class AnthropicProvider implements AIProvider {
       .join('\n\n');
     const systemText = req.system ?? (joinedSystem.length > 0 ? joinedSystem : undefined);
 
+    // Apply Prompt Caching for Anthropic if the system prompt is available.
+    const systemParam: Anthropic.MessageCreateParams['system'] = systemText 
+      ? [{ type: 'text', text: systemText, cache_control: { type: 'ephemeral' } }]
+      : undefined;
+
     const response = await this.client.messages.create({
       model: req.model,
       max_tokens: req.maxTokens ?? 4096,
       temperature: req.temperature,
       stop_sequences: req.stopSequences,
-      system: systemText,
+      system: systemParam,
       messages,
       tools: req.tools?.map((t) => ({
         name: t.name,
         description: t.description,
         input_schema: t.input_schema as Anthropic.Tool.InputSchema,
       })),
+    }, {
+      headers: { 'anthropic-beta': 'prompt-caching-2024-07-31' }
     });
 
     const content: ContentPart[] = response.content.map((block) => {

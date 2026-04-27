@@ -10,6 +10,7 @@ import {
 import { AIRouter } from '../integrations/router/ai-router.js';
 import { buildOctorouteProvider } from '../integrations/local-llm/octoroute.js';
 import { setRestartProviderCallback } from '../tools/admin-tool.js';
+import { TokenOptimizerProvider } from '../token-optimizer/index.js';
 
 /**
  * Provider factory.
@@ -52,24 +53,23 @@ export function resolveDefaultModel(): string {
 function resolveProvider(): ResolvedProvider {
   if (cached) return cached;
   const env = loadEnv();
+  let baseProvider: AIProvider;
+  let defaultModel: string;
+
   switch (env.DOGE_PROVIDER) {
     case 'anthropic': {
       const key = env.ANTHROPIC_API_KEY;
       if (!key) throw new Error('ANTHROPIC_API_KEY is required when DOGE_PROVIDER=anthropic');
-      cached = {
-        provider: new AnthropicProvider({ apiKey: key, baseURL: env.ANTHROPIC_BASE_URL }),
-        model: env.DOGE_MODEL,
-      };
-      return cached;
+      baseProvider = new AnthropicProvider({ apiKey: key, baseURL: env.ANTHROPIC_BASE_URL });
+      defaultModel = env.DOGE_MODEL;
+      break;
     }
     case 'openai': {
       const key = env.OPENAI_API_KEY;
       if (!key) throw new Error('OPENAI_API_KEY is required when DOGE_PROVIDER=openai');
-      cached = {
-        provider: new OpenAIProvider({ apiKey: key, baseURL: env.OPENAI_BASE_URL, label: 'openai' }),
-        model: env.DOGE_MODEL,
-      };
-      return cached;
+      baseProvider = new OpenAIProvider({ apiKey: key, baseURL: env.OPENAI_BASE_URL, label: 'openai' });
+      defaultModel = env.DOGE_MODEL;
+      break;
     }
     case 'custom': {
       const key = env.DOGE_CUSTOM_API_KEY;
@@ -79,11 +79,9 @@ function resolveProvider(): ResolvedProvider {
           'DOGE_CUSTOM_API_KEY and DOGE_CUSTOM_BASE_URL are required when DOGE_PROVIDER=custom',
         );
       }
-      cached = {
-        provider: new OpenAIProvider({ apiKey: key, baseURL: base, label: 'custom' }),
-        model: env.DOGE_CUSTOM_MODEL ?? env.DOGE_MODEL,
-      };
-      return cached;
+      baseProvider = new OpenAIProvider({ apiKey: key, baseURL: base, label: 'custom' });
+      defaultModel = env.DOGE_CUSTOM_MODEL ?? env.DOGE_MODEL;
+      break;
     }
     case 'router': {
       const config = loadRouterConfig();
@@ -93,17 +91,28 @@ function resolveProvider(): ResolvedProvider {
         );
       }
       const router: AIRouter = buildRouterFromConfig(config);
-      cached = { provider: router, model: env.DOGE_MODEL };
+      baseProvider = router;
+      defaultModel = env.DOGE_MODEL;
       logger.info('provider.router.ready', { backends: router.listBackends().length });
-      return cached;
+      break;
     }
     case 'octoroute': {
       const provider = buildOctorouteProvider();
       if (!provider) {
         throw new Error('OCTOROUTE_URL is required when DOGE_PROVIDER=octoroute');
       }
-      cached = { provider, model: env.OCTOROUTE_MODEL };
-      return cached;
+      baseProvider = provider;
+      defaultModel = env.OCTOROUTE_MODEL;
+      break;
     }
+    default:
+      throw new Error(`Unsupported provider: ${env.DOGE_PROVIDER}`);
   }
+
+  // Wrap with Token Optimizer
+  cached = {
+    provider: new TokenOptimizerProvider(baseProvider),
+    model: defaultModel,
+  };
+  return cached;
 }
