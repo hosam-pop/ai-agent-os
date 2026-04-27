@@ -1,0 +1,17 @@
+[project]
+name = "ai-agent-os-sandbox"
+version = "1.0.0"
+description = "Code-execution MCP worker for the AI Agent OS Manager."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "mcp>=1.2.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

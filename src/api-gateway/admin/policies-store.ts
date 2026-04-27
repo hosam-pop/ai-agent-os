@@ -27,6 +27,7 @@ export const CAPABILITIES = [
   { id: 'shell.run', label: 'Execute shell commands in sandbox', group: 'runtime' },
   { id: 'web.search', label: 'Run web searches', group: 'runtime' },
   { id: 'web.fetch', label: 'Fetch arbitrary URLs', group: 'runtime' },
+  { id: 'sandbox.run', label: 'Run code in execution sandbox', group: 'runtime' },
 ] as const;
 
 export type CapabilityId = (typeof CAPABILITIES)[number]['id'];
@@ -61,6 +62,7 @@ const DEFAULT_AGENTS: AgentPolicy[] = [
       'shell.run': false,
       'web.search': true,
       'web.fetch': true,
+      'sandbox.run': false,
     },
   },
 ];

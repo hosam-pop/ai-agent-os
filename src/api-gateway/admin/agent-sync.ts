@@ -20,6 +20,12 @@ export const CAPABILITY_TO_TOOL: Readonly<Record<string, string>> = Object.freez
   'web.search': 'web_search',
   'shell.run': 'execute_code',
   'code.read': 'file_search',
+  // `sandbox.run` is backed by the dedicated sandbox Fly app exposed to
+  // LibreChat via the `code-sandbox` MCP server (deploy/sandbox/). When the
+  // admin toggles this capability OFF the tool name is removed from the
+  // manager agent's MongoDB `tools` array; LibreChat then stops advertising
+  // the tool to Gemini on the next conversation turn.
+  'sandbox.run': 'code_sandbox',
 });
 
 // Tools the manager agent should always carry regardless of policy. `artifacts`
