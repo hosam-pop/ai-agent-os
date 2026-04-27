@@ -26,6 +26,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 
 SUPPORTED_LANGUAGES: dict[str, list[str]] = {
@@ -66,7 +67,25 @@ def _truncate(buf: str) -> str:
     return buf.encode("utf-8")[:MAX_OUTPUT_BYTES].decode("utf-8", errors="replace") + "\n…[truncated]"
 
 
-mcp = FastMCP("code-sandbox", stateless_http=True)
+def _allowed_hosts() -> list[str]:
+    """Hosts the MCP server accepts in the `Host` header.
+
+    DNS-rebinding protection is on by default in `TransportSecuritySettings`;
+    the ALLOWED_HOSTS env var lets the operator extend the list (comma-separated)
+    without redeploying the image. We always allow the default Fly hostname plus
+    localhost for local smoke testing.
+    """
+    base = ["ai-agent-os-sandbox.fly.dev", "localhost", "127.0.0.1"]
+    extra = os.environ.get("ALLOWED_HOSTS", "")
+    base.extend(h.strip() for h in extra.split(",") if h.strip())
+    return base
+
+
+mcp = FastMCP(
+    "code-sandbox",
+    stateless_http=True,
+    transport_security=TransportSecuritySettings(allowed_hosts=_allowed_hosts()),
+)
 
 
 @mcp.tool()
@@ -190,7 +209,9 @@ def _constant_time_eq(a: str, b: str) -> bool:
     return diff == 0
 
 
-# Mount the streamable-http MCP transport at /mcp — this is the URL LibreChat
-# connects to when `mcpServers.code-sandbox.url` resolves to
-# `https://ai-agent-os-sandbox.fly.dev/mcp`.
-app.mount("/mcp", mcp.streamable_http_app())
+# Mount the streamable-http MCP transport at root — the inner app already
+# registers its own `/mcp` route, so the public URL ends up as
+# `https://ai-agent-os-sandbox.fly.dev/mcp` (which is what
+# `mcpServers.code-sandbox.url` points at). FastAPI resolves explicit routes
+# (`/healthz`) before mounts, so the health endpoint stays reachable.
+app.mount("/", mcp.streamable_http_app())
