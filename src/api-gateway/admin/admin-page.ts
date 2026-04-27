@@ -234,6 +234,7 @@ input:focus {
   font-weight: 600;
   font-size: 13px;
 }
+.alert[hidden] { display: none; }
 .alert-error {
   background-color: var(--danger-bg);
   border: 1px solid var(--danger-border);
