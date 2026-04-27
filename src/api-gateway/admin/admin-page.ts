@@ -234,6 +234,7 @@ input:focus {
   font-weight: 600;
   font-size: 13px;
 }
+.alert[hidden] { display: none; }
 .alert-error {
   background-color: var(--danger-bg);
   border: 1px solid var(--danger-border);
@@ -413,7 +414,13 @@ const PAGE_JS = String.raw`
   }
 
   async function api(path, init) {
-    const r = await fetch(path, Object.assign({ credentials: 'same-origin', headers: { 'content-type': 'application/json' } }, init || {}));
+    const opts = Object.assign({ credentials: 'same-origin' }, init || {});
+    // Only set content-type when there's a JSON body. Fastify rejects requests
+    // that declare content-type=application/json but send an empty body.
+    if (opts.body) {
+      opts.headers = Object.assign({ 'content-type': 'application/json' }, opts.headers || {});
+    }
+    const r = await fetch(path, opts);
     let body = null;
     const text = await r.text();
     try { body = text ? JSON.parse(text) : null; } catch (_) { body = { raw: text }; }
