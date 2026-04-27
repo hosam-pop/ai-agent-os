@@ -105,6 +105,8 @@ export async function buildGateway(opts: GatewayOptions = {}): Promise<FastifyIn
     policiesPath: env.KEYS_POLICIES_PATH,
     secureCookie: env.KEYS_COOKIE_SECURE,
     requiredRole: env.KEYS_REQUIRED_ROLE,
+    librechatMongoUri: env.LIBRECHAT_MONGO_URI,
+    managerAgentId: env.MANAGER_AGENT_ID,
   });
 
   return app;

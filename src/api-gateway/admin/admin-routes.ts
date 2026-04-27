@@ -4,6 +4,12 @@ import { renderAdminKeysPage } from './admin-page.js';
 import { KeycloakAdmin } from './keycloak-admin.js';
 import { createFileKeysStore, KeysStore, toPublicStatus } from './keys-store.js';
 import { CAPABILITIES, createFilePoliciesStore, PolicyDocument } from './policies-store.js';
+import {
+  CAPABILITY_TO_TOOL,
+  computeEffectiveTools,
+  MANAGER_AGENT_ID,
+  syncAgentToolsToMongo,
+} from './agent-sync.js';
 import { findProvider, PROVIDERS } from './providers.js';
 
 export interface AdminKeysRoutesOptions {
@@ -22,6 +28,12 @@ export interface AdminKeysRoutesOptions {
   secureCookie?: boolean;
   // Realm role required to use the panel. Defaults to 'agent-admin'.
   requiredRole?: string;
+  // Optional LibreChat MongoDB URI. When set, capability changes are pushed
+  // into the seeded manager agent's `tools` array so disabling a capability
+  // actually removes the matching tool from the LibreChat runtime.
+  librechatMongoUri?: string;
+  // Optional manager agent id (defaults to the seeded `agent_aios_manager`).
+  managerAgentId?: string;
 }
 
 const DEFAULT_STORE_PATH = '/data/admin-keys.json';
@@ -326,9 +338,23 @@ export async function registerAdminKeysRoutes(
   });
 
   // ------- Agent permissions -------
+  const managerAgentId = opts.managerAgentId ?? MANAGER_AGENT_ID;
+  const librechatMongoUri = opts.librechatMongoUri;
+
   app.get('/admin/keys/api/policies', async (_req, reply) => {
     const doc = await policies.load();
-    reply.send({ capabilities: CAPABILITIES, policy: doc });
+    const manager = doc.agents.find(a => a.agentId === 'manager');
+    const effective = manager ? computeEffectiveTools(manager) : [];
+    reply.send({
+      capabilities: CAPABILITIES,
+      policy: doc,
+      runtime: {
+        agentId: managerAgentId,
+        capabilityToTool: CAPABILITY_TO_TOOL,
+        effectiveTools: effective,
+        mongoConfigured: Boolean(librechatMongoUri),
+      },
+    });
   });
 
   app.put('/admin/keys/api/policies', async (req, reply) => {
@@ -338,7 +364,53 @@ export async function registerAdminKeysRoutes(
       return reply.code(400).send({ error: 'invalid_request', message: 'expected { policy: { version: 1, agents: [...] } }' });
     }
     const saved = await policies.save(incoming);
-    reply.send({ ok: true, policy: saved });
+
+    // Push the manager agent's effective tool list into LibreChat MongoDB so
+    // disabling a capability really hides the corresponding tool from Gemini.
+    let runtime: Record<string, unknown> | undefined;
+    const manager = saved.agents.find(a => a.agentId === 'manager');
+    if (manager) {
+      const result = await syncAgentToolsToMongo({
+        mongoUri: librechatMongoUri,
+        policy: manager,
+        agentId: managerAgentId,
+      });
+      runtime = result.ok
+        ? {
+            ok: true,
+            agentId: result.agentId,
+            toolsBefore: result.toolsBefore,
+            toolsAfter: result.toolsAfter,
+            changed: result.changed,
+          }
+        : {
+            ok: false,
+            agentId: result.agentId,
+            reason: result.reason,
+            message: result.message,
+            toolsAfter: result.toolsAfter,
+          };
+      if (!result.ok && result.reason !== 'no_mongo_uri') {
+        app.log.warn({ runtime }, 'agent-sync failed (policy still saved on volume)');
+      }
+    }
+
+    reply.send({ ok: true, policy: saved, runtime });
+  });
+
+  // Read-only view of what LibreChat is actually exposing right now. The UI
+  // calls this to render an "effective tools" pill so the operator sees the
+  // mapping without leaving the panel.
+  app.get('/admin/keys/api/agents/manager/effective-tools', async (_req, reply) => {
+    const doc = await policies.load();
+    const manager = doc.agents.find(a => a.agentId === 'manager');
+    const effective = manager ? computeEffectiveTools(manager) : [];
+    reply.send({
+      agentId: managerAgentId,
+      effectiveTools: effective,
+      capabilityToTool: CAPABILITY_TO_TOOL,
+      mongoConfigured: Boolean(librechatMongoUri),
+    });
   });
 
   app.log.info(
