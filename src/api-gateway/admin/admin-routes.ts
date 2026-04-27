@@ -42,11 +42,28 @@ export async function registerAdminKeysRoutes(
     masterKey,
   });
 
+  // The admin page ships with inline <style> and <script> blocks, plus the
+  // Cairo font from Google Fonts. The default gateway CSP (default-src 'self')
+  // would block all of them and render the page as plain text. Override the
+  // CSP for this route only — the rest of the gateway keeps the strict policy.
+  const adminPageCsp = [
+    "default-src 'self'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "script-src 'self' 'unsafe-inline'",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "object-src 'none'",
+  ].join('; ');
+
   app.get('/admin/keys', async (req, reply) => {
     const session = auth.validateSessionFromRequest(req);
     reply
       .type('text/html')
       .header('cache-control', 'no-store, max-age=0')
+      .header('Content-Security-Policy', adminPageCsp)
       .send(renderAdminKeysPage({ signedIn: session.ok }));
   });
 
