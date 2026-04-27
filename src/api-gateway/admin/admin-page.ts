@@ -411,6 +411,7 @@ input:focus {
   font-size: 13px;
 }
 .alert[hidden] { display: none; }
+[hidden] { display: none !important; }
 .alert-error {
   background-color: var(--danger-bg);
   border: 1px solid var(--danger-border);
