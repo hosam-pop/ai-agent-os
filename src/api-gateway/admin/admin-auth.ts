@@ -1,35 +1,53 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { KeycloakAdmin } from './keycloak-admin.js';
+
+export interface AdminSession {
+  userId: string;
+  username: string;
+  email?: string;
+  roles: string[];
+  expiresAt: number;
+}
 
 export interface AdminAuthConfig {
-  // Plaintext password the admin types into the panel. Stored as a Fly secret
-  // (KEYS_ADMIN_PASSWORD). Comparison is constant-time.
-  password: string;
-  // HMAC key used to sign session cookies. Reuses KEYS_MASTER_KEY by default.
+  // HMAC key used to sign session cookies (reuses KEYS_MASTER_KEY).
   sessionKey: string;
-  // Cookie name & ttl.
   cookieName: string;
   ttlMs: number;
-  // True when the gateway is served over HTTPS (set Secure cookie).
   secureCookie: boolean;
+  // Realm role required to access the admin panel.
+  requiredRole: string;
+  // Keycloak admin bridge client used for ROPC + admin REST calls.
+  keycloak: KeycloakAdmin;
 }
 
 const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
 
 export function buildAdminAuth(opts: {
-  password: string;
   sessionKey: string;
+  keycloak: KeycloakAdmin;
   ttlMs?: number;
   secureCookie?: boolean;
+  requiredRole?: string;
 }): AdminAuth {
   const cfg: AdminAuthConfig = {
-    password: opts.password,
     sessionKey: opts.sessionKey,
     cookieName: 'aaos_admin_session',
     ttlMs: opts.ttlMs ?? DEFAULT_TTL_MS,
     secureCookie: opts.secureCookie ?? true,
+    requiredRole: opts.requiredRole ?? 'agent-admin',
+    keycloak: opts.keycloak,
   };
   return new AdminAuth(cfg);
+}
+
+export interface LoginOutcome {
+  ok: boolean;
+  reason?: string;
+  status?: number;
+  session?: AdminSession;
+  rawToken?: string; // exposed once, used by callers that want to forward it
 }
 
 export class AdminAuth {
@@ -39,30 +57,72 @@ export class AdminAuth {
     return this.cfg.cookieName;
   }
 
-  verifyPassword(submitted: string): boolean {
-    if (!this.cfg.password) return false;
-    const a = Buffer.from(submitted, 'utf8');
-    const b = Buffer.from(this.cfg.password, 'utf8');
-    if (a.length !== b.length) {
-      // Constant-time fallback: hash both and compare.
-      const ha = createHmac('sha256', this.cfg.sessionKey).update(a).digest();
-      const hb = createHmac('sha256', this.cfg.sessionKey).update(b).digest();
-      return timingSafeEqual(ha, hb);
+  get keycloak(): KeycloakAdmin {
+    return this.cfg.keycloak;
+  }
+
+  // Username + password -> ROPC -> validated session. Rejects users without
+  // the agent-admin realm role even if Keycloak accepts the credentials.
+  async loginWithPassword(username: string, password: string): Promise<LoginOutcome> {
+    const result = await this.cfg.keycloak.loginWithPassword(username, password);
+    if (!result.ok || !result.accessToken) {
+      return {
+        ok: false,
+        status: result.status,
+        reason: result.errorDescription ?? 'invalid credentials',
+      };
     }
-    return timingSafeEqual(a, b);
-  }
-
-  issueSession(): { token: string; expiresAt: number } {
+    const payload = KeycloakAdmin.decodeJwtPayload(result.accessToken);
+    const roles = payload.realm_access?.roles ?? [];
+    if (!roles.includes(this.cfg.requiredRole)) {
+      return {
+        ok: false,
+        status: 403,
+        reason: `account lacks ${this.cfg.requiredRole} role`,
+      };
+    }
     const expiresAt = Date.now() + this.cfg.ttlMs;
-    const payload = `${expiresAt}.admin`;
-    const sig = this.sign(payload);
-    return { token: `${payload}.${sig}`, expiresAt };
+    const session: AdminSession = {
+      userId: String(payload.sub ?? ''),
+      username: String(payload.preferred_username ?? username),
+      email: payload.email,
+      roles,
+      expiresAt,
+    };
+    return { ok: true, session, rawToken: result.accessToken };
   }
 
-  setSessionCookie(reply: FastifyReply, token: string): void {
+  encodeSessionCookie(sess: AdminSession): string {
+    const payload = Buffer.from(JSON.stringify(sess), 'utf8').toString('base64url');
+    const sig = this.sign(payload);
+    return `${payload}.${sig}`;
+  }
+
+  decodeSessionCookie(raw: string): { ok: boolean; reason?: string; session?: AdminSession } {
+    const idx = raw.lastIndexOf('.');
+    if (idx <= 0) return { ok: false, reason: 'malformed' };
+    const payload = raw.slice(0, idx);
+    const sig = raw.slice(idx + 1);
+    const expected = this.sign(payload);
+    if (!safeEq(expected, sig)) return { ok: false, reason: 'bad signature' };
+    let sess: AdminSession;
+    try {
+      sess = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    } catch {
+      return { ok: false, reason: 'malformed payload' };
+    }
+    if (typeof sess.expiresAt !== 'number' || sess.expiresAt <= Date.now()) {
+      return { ok: false, reason: 'expired' };
+    }
+    return { ok: true, session: sess };
+  }
+
+  setSessionCookie(reply: FastifyReply, sess: AdminSession): void {
+    const token = this.encodeSessionCookie(sess);
+    const maxAge = Math.max(0, Math.floor((sess.expiresAt - Date.now()) / 1000));
     const attrs = [
       `${this.cfg.cookieName}=${token}`,
-      `Max-Age=${Math.floor(this.cfg.ttlMs / 1000)}`,
+      `Max-Age=${maxAge}`,
       'Path=/',
       'HttpOnly',
       'SameSite=Lax',
@@ -83,7 +143,7 @@ export class AdminAuth {
     reply.header('Set-Cookie', attrs.join('; '));
   }
 
-  validateSessionFromRequest(req: FastifyRequest): { ok: boolean; reason?: string } {
+  validateSessionFromRequest(req: FastifyRequest): { ok: boolean; reason?: string; session?: AdminSession } {
     const cookieHeader = req.headers['cookie'];
     if (!cookieHeader || typeof cookieHeader !== 'string') {
       return { ok: false, reason: 'missing cookie' };
@@ -91,20 +151,7 @@ export class AdminAuth {
     const cookies = parseCookieHeader(cookieHeader);
     const raw = cookies[this.cfg.cookieName];
     if (!raw) return { ok: false, reason: 'missing session cookie' };
-    return this.validateSessionToken(raw);
-  }
-
-  validateSessionToken(token: string): { ok: boolean; reason?: string } {
-    const parts = token.split('.');
-    if (parts.length !== 3) return { ok: false, reason: 'malformed' };
-    const [expRaw, scope, sig] = parts;
-    if (scope !== 'admin') return { ok: false, reason: 'wrong scope' };
-    const expected = this.sign(`${expRaw}.${scope}`);
-    const ok = safeEq(expected, sig!);
-    if (!ok) return { ok: false, reason: 'bad signature' };
-    const exp = Number(expRaw);
-    if (!Number.isFinite(exp) || exp <= Date.now()) return { ok: false, reason: 'expired' };
-    return { ok: true };
+    return this.decodeSessionCookie(raw);
   }
 
   private sign(payload: string): string {
@@ -129,5 +176,9 @@ function parseCookieHeader(raw: string): Record<string, string> {
 
 function safeEq(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+  try {
+    return timingSafeEqual(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
+  } catch {
+    return false;
+  }
 }
