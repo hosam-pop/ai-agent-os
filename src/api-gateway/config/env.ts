@@ -43,6 +43,13 @@ const GatewayEnvSchema = z.object({
   KEYS_REQUIRED_ROLE: z.string().default('agent-admin'),
   KEYCLOAK_ADMIN_BRIDGE_CLIENT_ID: z.string().optional(),
   KEYCLOAK_ADMIN_BRIDGE_SECRET: z.string().optional(),
+  // LibreChat MongoDB URI used by /admin/keys/api/policies to push capability
+  // changes into the seeded manager agent's tools array. When unset, policy
+  // saves still persist on the volume but have no runtime effect.
+  LIBRECHAT_MONGO_URI: z.string().optional(),
+  // Stable LibreChat agent id whose tools are kept in sync with the manager
+  // policy. Defaults to the value used by seed-manager-agent.js.
+  MANAGER_AGENT_ID: z.string().optional(),
   // Legacy break-glass password from before SSO; ignored when set, kept here so
   // existing Fly secrets don't fail validation. Will be removed in a follow-up.
   KEYS_ADMIN_PASSWORD: z.string().optional(),

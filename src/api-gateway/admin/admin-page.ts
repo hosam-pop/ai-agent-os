@@ -120,6 +120,16 @@ export function renderAdminKeysPage(opts: RenderAdminKeysPageOptions): string {
       <section class="card tab-panel" data-tab="agents" role="tabpanel" hidden>
         <h1 class="card-title" data-i18n="agents.title">Agent permissions</h1>
         <p class="card-subtitle" data-i18n="agents.subtitle">Decide what each agent is allowed to do. Disabling a capability removes the matching tool from the agent's runtime.</p>
+        <div id="agents-runtime" class="runtime-panel" aria-live="polite" hidden>
+          <div class="runtime-row">
+            <span class="runtime-label" data-i18n="agents.runtime.effectiveTools">Effective LibreChat tools</span>
+            <span id="agents-runtime-tools" class="runtime-value"></span>
+          </div>
+          <div class="runtime-row">
+            <span class="runtime-label" data-i18n="agents.runtime.sync">Runtime sync</span>
+            <span id="agents-runtime-sync" class="runtime-value"></span>
+          </div>
+        </div>
         <div id="agents-list" class="agent-list" aria-live="polite"></div>
         <div id="agents-error" class="alert alert-error" hidden></div>
         <div id="agents-ok" class="alert alert-ok" hidden></div>
@@ -542,6 +552,39 @@ input:focus {
 }
 .user-row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .agent-list { display: flex; flex-direction: column; gap: 18px; }
+.runtime-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.runtime-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 13px;
+}
+.runtime-label { color: var(--text-soft); min-width: 220px; }
+.runtime-value { color: var(--text); font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.runtime-value .tool-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-right: 6px;
+  margin-bottom: 4px;
+  background: rgba(79, 157, 255, 0.15);
+  border: 1px solid rgba(79, 157, 255, 0.45);
+  border-radius: 999px;
+  color: #c8dfff;
+  font-size: 12px;
+}
+.runtime-value[data-state="ok"] { color: var(--ok-fg); }
+.runtime-value[data-state="warn"] { color: #f5d08a; }
+.runtime-value[data-state="err"] { color: var(--danger-fg); }
 .agent-card {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -659,6 +702,13 @@ const PAGE_JS = String.raw`
       'agents.subtitle': "Decide what each agent is allowed to do. Disabling a capability removes the matching tool from the agent's runtime.",
       'agents.save': 'Save permissions',
       'agents.saved': 'Permissions saved.',
+      'agents.runtime.effectiveTools': 'Effective LibreChat tools',
+      'agents.runtime.sync': 'Runtime sync',
+      'agents.runtime.syncOk': 'Synced to LibreChat MongoDB ({tools})',
+      'agents.runtime.syncUnchanged': 'Already up to date in LibreChat MongoDB',
+      'agents.runtime.syncSkipped': 'MongoDB not configured — saved on volume only',
+      'agents.runtime.syncFailed': 'Sync failed: {message}',
+      'agents.runtime.noTools': '(no runtime-gated tools enabled)',
       'account.title': 'My account',
       'account.subtitle': 'Change the password for your own AI Agent OS account. The new password applies everywhere (LibreChat, Keycloak, this console).',
       'account.username': 'Username',
@@ -721,6 +771,13 @@ const PAGE_JS = String.raw`
       'agents.subtitle': 'حدّد ما يستطيع كل وكيل فعله. إلغاء أي قدرة يُزيل الأداة المقابلة من بيئة تشغيل الوكيل.',
       'agents.save': 'حفظ الصلاحيات',
       'agents.saved': 'تم حفظ الصلاحيات.',
+      'agents.runtime.effectiveTools': 'أدوات LibreChat الفعّالة',
+      'agents.runtime.sync': 'حالة المزامنة',
+      'agents.runtime.syncOk': 'تمت المزامنة مع LibreChat MongoDB ({tools})',
+      'agents.runtime.syncUnchanged': 'الإعدادات في LibreChat MongoDB مطابقة بالفعل',
+      'agents.runtime.syncSkipped': 'MongoDB غير معدّ — الحفظ تمّ على الوحدة فقط',
+      'agents.runtime.syncFailed': 'فشلت المزامنة: {message}',
+      'agents.runtime.noTools': '(لا توجد أدوات محصورة بالصلاحيات)',
       'account.title': 'حسابي',
       'account.subtitle': 'غيّر كلمة سر حسابك في AI Agent OS. الكلمة الجديدة تنطبق في كل مكان (LibreChat و Keycloak ولوحة الإدارة).',
       'account.username': 'اسم المستخدم',
@@ -1112,6 +1169,55 @@ const PAGE_JS = String.raw`
     return node;
   }
 
+  function renderRuntimeTools(tools) {
+    const el = document.getElementById('agents-runtime-tools');
+    if (!el) return;
+    el.innerHTML = '';
+    if (!tools || tools.length === 0) {
+      el.textContent = t('agents.runtime.noTools');
+      return;
+    }
+    tools.forEach(function (toolName) {
+      const pill = document.createElement('span');
+      pill.className = 'tool-pill';
+      pill.textContent = toolName;
+      el.appendChild(pill);
+    });
+  }
+
+  function renderRuntimeSync(state, text) {
+    const el = document.getElementById('agents-runtime-sync');
+    if (!el) return;
+    el.dataset.state = state || '';
+    el.textContent = text || '';
+  }
+
+  function applyRuntimeFromResponse(runtime) {
+    const panel = document.getElementById('agents-runtime');
+    if (!panel) return;
+    if (!runtime) { panel.hidden = true; return; }
+    panel.hidden = false;
+    if (runtime.effectiveTools) {
+      renderRuntimeTools(runtime.effectiveTools);
+    } else if (runtime.toolsAfter) {
+      renderRuntimeTools(runtime.toolsAfter);
+    }
+    if (runtime.ok === false && runtime.reason === 'no_mongo_uri') {
+      renderRuntimeSync('warn', t('agents.runtime.syncSkipped'));
+    } else if (runtime.ok === false) {
+      renderRuntimeSync('err', t('agents.runtime.syncFailed').replace('{message}', runtime.message || runtime.reason || ''));
+    } else if (runtime.ok && runtime.changed === false) {
+      renderRuntimeSync('ok', t('agents.runtime.syncUnchanged'));
+    } else if (runtime.ok) {
+      const tools = (runtime.toolsAfter || []).join(', ');
+      renderRuntimeSync('ok', t('agents.runtime.syncOk').replace('{tools}', tools));
+    } else if (runtime.mongoConfigured === false) {
+      renderRuntimeSync('warn', t('agents.runtime.syncSkipped'));
+    } else {
+      renderRuntimeSync('', '');
+    }
+  }
+
   async function saveAgentPolicy(node, agentId) {
     const status = node.querySelector('.agent-status');
     status.hidden = true;
@@ -1141,6 +1247,9 @@ const PAGE_JS = String.raw`
     } else {
       status.dataset.state = 'ok';
       status.textContent = t('agents.saved');
+      if (save.body && save.body.runtime) {
+        applyRuntimeFromResponse(save.body.runtime);
+      }
     }
   }
 
@@ -1158,6 +1267,17 @@ const PAGE_JS = String.raw`
     cachedCapabilities = r.body.capabilities || [];
     const agents = (r.body.policy && r.body.policy.agents) || [];
     agents.forEach(function (a) { list.appendChild(buildAgentCard(a)); });
+
+    if (r.body.runtime) {
+      const panel = document.getElementById('agents-runtime');
+      if (panel) panel.hidden = false;
+      renderRuntimeTools(r.body.runtime.effectiveTools);
+      if (r.body.runtime.mongoConfigured === false) {
+        renderRuntimeSync('warn', t('agents.runtime.syncSkipped'));
+      } else {
+        renderRuntimeSync('ok', t('agents.runtime.syncUnchanged'));
+      }
+    }
   }
 
   // ---------- Account tab ----------
