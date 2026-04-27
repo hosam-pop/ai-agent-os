@@ -7,6 +7,10 @@
 #   UPSTREAM_AI_AGENT_OS            https://ai-agent-os-backend.fly.dev  (optional)
 #   UPSTREAM_LIBRECHAT              https://ai-agent-os-librechat.fly.dev
 #   GATEWAY_CORS_ORIGINS            https://ai-agent-os-librechat.fly.dev
+#
+# Admin keys panel (/admin/keys) — both required to enable:
+#   KEYS_MASTER_KEY                 32+ char random string (used for AES-256-GCM + cookie HMAC)
+#   KEYS_ADMIN_PASSWORD             admin password the panel asks for at sign-in
 # ============================================================================
 
 app = "ai-agent-os-gateway"
@@ -29,6 +33,13 @@ kill_timeout = "10s"
   GATEWAY_RATE_LIMIT_MAX = "300"
   GATEWAY_RATE_LIMIT_WINDOW = "1 minute"
   GATEWAY_TRUST_PROXY = "true"
+  KEYS_STORE_PATH = "/data/admin-keys.json"
+  KEYS_COOKIE_SECURE = "true"
+
+[[mounts]]
+  source = "aaos_gateway_data"
+  destination = "/data"
+  initial_size = "1gb"
 
 [[services]]
   protocol = "tcp"
