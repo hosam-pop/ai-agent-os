@@ -178,10 +178,23 @@ endpoints:
       modelDisplayLabel: 'Mistral'
 
 # -----------------------------------------------------------------------------
-# MCP servers exposed to agents. The `key-manager` server (Phase B) will be
-# added once it is deployed as a sidecar; leaving it unset here avoids boot-
-# time "Invalid URL" crashes when the secret is not yet configured.
+# MCP servers exposed to agents.
+#
+# `code-sandbox` is the dedicated code-execution worker (deploy/sandbox/) — a
+# small Python service running on Fly that exposes one tool, `run_code`, plus
+# `integrations_status`. Surfaced to the Manager Agent as the LibreChat tool
+# id `code_sandbox` and gated by the `sandbox.run` capability in /admin/keys.
 # -----------------------------------------------------------------------------
+mcpServers:
+  code-sandbox:
+    type: streamable-http
+    url: '${SANDBOX_MCP_URL}'
+    timeout: 60000
+    headers:
+      Authorization: 'Bearer ${SANDBOX_TOKEN}'
+# `key-manager` (Phase B) will be added once that sidecar is deployed; leaving
+# it commented avoids boot-time "Invalid URL" crashes when the secret is not
+# yet configured.
 # mcpServers:
 #   key-manager:
 #     type: streamable-http

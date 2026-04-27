@@ -809,6 +809,7 @@ const PAGE_JS = String.raw`
       'shell.run': 'Execute shell commands in sandbox',
       'web.search': 'Run web searches',
       'web.fetch': 'Fetch arbitrary URLs',
+      'sandbox.run': 'Run code in execution sandbox',
     },
     ar: {
       'keys.read': 'عرض مفاتيح الـ API',
@@ -824,6 +825,7 @@ const PAGE_JS = String.raw`
       'shell.run': 'تنفيذ أوامر shell داخل الـ sandbox',
       'web.search': 'إجراء بحث على الإنترنت',
       'web.fetch': 'تحميل أي رابط من الإنترنت',
+      'sandbox.run': 'تشغيل الكود داخل sandbox تنفيذي',
     },
   };
 

@@ -1,0 +1,36 @@
+# Fly.io configuration for the ai-agent-os code-execution sandbox.
+#
+# Tiny worker: shared-cpu-1x / 256 MB RAM is enough for short Python/bash/node
+# snippets called by the Manager Agent. No volumes — every run uses an
+# ephemeral /tmp directory inside the VM.
+
+app = "ai-agent-os-sandbox"
+primary_region = "fra"
+
+[build]
+  dockerfile = "../sandbox/Dockerfile"
+  build-target = "base"
+
+[env]
+  PORT = "8080"
+  # SANDBOX_TOKEN, GITHUB_PAT, GEMINI_API_KEY are set via `fly secrets set`.
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
