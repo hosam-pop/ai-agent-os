@@ -6,6 +6,7 @@ import { buildJwtVerifier, makeJwtPreHandler } from './middleware/jwt.js';
 import { registerSecurityHeaders } from './middleware/security-headers.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerProxyRoute } from './routes/proxy.js';
+import { registerAdminKeysRoutes } from './admin/admin-routes.js';
 
 export interface GatewayOptions {
   env?: GatewayEnv;
@@ -94,6 +95,13 @@ export async function buildGateway(opts: GatewayOptions = {}): Promise<FastifyIn
       name: entry.name,
     });
   }
+
+  await registerAdminKeysRoutes(app, {
+    masterKey: env.KEYS_MASTER_KEY,
+    adminPassword: env.KEYS_ADMIN_PASSWORD,
+    storePath: env.KEYS_STORE_PATH,
+    secureCookie: env.KEYS_COOKIE_SECURE,
+  });
 
   return app;
 }

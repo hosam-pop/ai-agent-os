@@ -34,6 +34,12 @@ const GatewayEnvSchema = z.object({
   GATEWAY_CORS_ORIGINS: z.string().default(''),
   GATEWAY_TRUST_PROXY: z.coerce.boolean().default(true),
   GATEWAY_REQUIRE_AUTH: z.coerce.boolean().default(true),
+
+  // Admin keys panel (/admin/keys)
+  KEYS_MASTER_KEY: z.string().optional(),
+  KEYS_ADMIN_PASSWORD: z.string().optional(),
+  KEYS_STORE_PATH: z.string().optional(),
+  KEYS_COOKIE_SECURE: z.coerce.boolean().default(true),
 });
 
 export type GatewayEnv = z.infer<typeof GatewayEnvSchema>;
