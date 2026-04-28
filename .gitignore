@@ -14,3 +14,8 @@ bun.lock
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+/cybersecurity-demo-report.md
+
+# Python sandbox build artifacts
+__pycache__/
+*.pyc

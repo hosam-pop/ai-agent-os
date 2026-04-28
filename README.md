@@ -1,5 +1,7 @@
 # AI Agent OS
 
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/hosam-pop/ai-agent-os?utm_source=oss&utm_medium=github&utm_campaign=hosam-pop%2Fai-agent-os&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
+
 Unified autonomous agent runtime that integrates architectural ideas from two
 open-source projects — [pengchengneo/Claude-Code](https://github.com/pengchengneo/Claude-Code)
 and [HELPMEEADICE/doge-code](https://github.com/HELPMEEADICE/doge-code) — into a
@@ -12,6 +14,92 @@ registry (bash / file / web), task decomposition with a parallel DAG
 orchestrator, plugin hooks, a permission engine, and an interactive Ink TUI.
 The experimental Claude-Code modules — BUDDY, KAIROS, ULTRAPLAN, COORDINATOR,
 BRIDGE — are included behind feature flags.
+
+On top of that base, **Ultimate Integrations** add an in-conversation AdminTool
+and seven opt-in integration slots under `src/integrations/`:
+
+| Slot | What you get | Feature flag |
+| --- | --- | --- |
+| `browser/` | Playwright-based `BrowserTool` (navigate, click, type, extract, screenshot) | `DOGE_FEATURE_BROWSER` |
+| `mem0/` | Semantic long-term memory via the [mem0ai](https://github.com/mem0ai/mem0) SDK, with local fallback | `DOGE_FEATURE_MEM0` |
+| `mcp/` | Generic MCP client (connects to [ultimate_mcp_server](https://github.com/Dicklesworthstone/ultimate_mcp_server), [0nMCP](https://github.com/0nork/0nMCP), or any other MCP server over stdio/HTTP) | `DOGE_FEATURE_MCP` |
+| `social/` | Twitter / LinkedIn / Slack / Calendar tool wrappers that delegate to the MCP server | `DOGE_FEATURE_SOCIAL` |
+| `router/` | Multi-provider router (failover / round-robin / weighted / least-recent) across any mix of Anthropic, OpenAI, and OpenAI-compatible endpoints | `DOGE_FEATURE_ROUTER` |
+| `openclaw/` | Channel adapters inspired by [openclaw](https://github.com/openclaw/openclaw): pluggable base + concrete Telegram long-poll and Slack Events/webhook adapters | `DOGE_FEATURE_SOCIAL` |
+| `local-llm/` | [Octoroute](https://github.com/slb350/octoroute)-style preset pointing the OpenAI provider at a local Ollama / LM Studio gateway | `DOGE_FEATURE_OCTOROUTE` |
+
+The `admin` tool (on by default via `DOGE_FEATURE_ADMIN=true`) lets the agent
+switch providers, change the default model, toggle feature gates, and add API
+keys from inside a conversation — it writes the `.env` and hot-reloads the
+provider cache without a restart.
+
+## Defensive security tools (`src/security/`)
+
+A four-family defensive command centre lives under `src/security/`. Every
+family is opt-in via its own feature flag and every external binary / service
+is optional — tools return a clean `ok: false` error if their dependency is
+missing instead of crashing the agent.
+
+| Family | Purpose | Engines / clients | Feature flag |
+| --- | --- | --- | --- |
+| `sast/` | Static code analysis — find bugs and vulnerabilities in source before it ships | [Semgrep](https://github.com/semgrep/semgrep) (via `semgrep --json`), [CodeQL](https://github.com/github/codeql) (via `codeql database analyze ... --format=sarif-latest`), [Bearer](https://github.com/Bearer/bearer) (via `bearer scan ... --format json`) | `DOGE_FEATURE_SAST` |
+| `dast/` | Dynamic analysis of running web apps | [Nuclei](https://github.com/projectdiscovery/nuclei) (JSONL streaming), [OWASP ZAP](https://github.com/zaproxy/zaproxy) baseline (JSON report) | `DOGE_FEATURE_DAST` |
+| `container/` | Container-image and SBOM vulnerability scanning | [Grype](https://github.com/anchore/grype) (`grype <target> -o json`), [Trivy](https://github.com/aquasecurity/trivy) (`trivy image/fs/repo --format json`) | `DOGE_FEATURE_CONTAINER_SCAN` |
+| `log-analysis/` | Threat hunting across centralised logs | [Elasticsearch / ELK](https://github.com/elastic/elasticsearch) (`_search` DSL), [Wazuh](https://github.com/wazuh/wazuh) REST API | `DOGE_FEATURE_LOG_ANALYSIS` |
+| `ids/` | Monitor network traffic for malicious activity | [Suricata](https://github.com/OISF/suricata) `eve.json` stream reader | `DOGE_FEATURE_IDS` |
+| `runtime/` | Runtime-security telemetry from Linux kernel hooks | [Falco](https://github.com/falcosecurity/falco) JSON log reader (`/var/log/falco/falco.json`) | `DOGE_FEATURE_RUNTIME_MONITOR` |
+| `llm-guard/` | Defensive scanner for LLM prompt-injection, jailbreaks, and PII in text the agent is about to process | [Vigil](https://github.com/deadbits/vigil-llm) HTTP client (`/analyze/prompt`) | `DOGE_FEATURE_LLM_GUARD` |
+| `threat-intel/` | Vulnerability lookups by CVE/GHSA id or package+ecosystem | [OSV.dev](https://osv.dev) public database (no auth required) | `DOGE_FEATURE_THREAT_INTEL` |
+| `detection-eng/` | Read-only index of [Atomic Red Team](https://github.com/redcanaryco/atomic-red-team) YAML definitions so SIEM / detection engineers can see which command patterns to alert on | Local YAML walker (never executes any atomic test) | `DOGE_FEATURE_DETECTION_ENG` |
+
+Each family exposes a single unified tool to the agent (`sast`, `dast`,
+`container_scan`, `log_analysis`, `ids`, `runtime_monitor`, `llm_guard`,
+`cve_lookup`, `atomic_lookup`) that selects the concrete engine at call time. Parsers are pure functions — the heavy lifting
+(process execution, HTTP, streaming files) is isolated in the runners /
+clients so the parsing logic is easy to unit-test without touching the
+network or any external binary.
+
+## Agent orchestration primitives (`src/orchestration/`)
+
+Four lightweight orchestration building blocks, each inspired by a widely
+used open-source framework and ported as a native TypeScript module. They
+are library-level primitives — enable `DOGE_FEATURE_ORCHESTRATION=true` to
+signal they are in use and import them directly from `src/orchestration/`.
+
+| Primitive | Inspiration | What it models |
+| --- | --- | --- |
+| `Crew` (`crew.ts`) | [CrewAI](https://github.com/crewAIInc/crewAI) | A team of role-bearing agents executing a task list sequentially or hierarchically, with dependency-aware ordering. |
+| `GroupChat` (`group-chat.ts`) | [AutoGen](https://github.com/microsoft/autogen) | Multi-agent conversations with pluggable speaker selectors (round-robin, keyword) and termination predicates. |
+| `StateGraph` (`state-graph.ts`) | [LangGraph](https://github.com/langchain-ai/langgraph) | Directed graph of async nodes over an immutable state, with conditional routing and an `END` sentinel. |
+| `TaskQueue` (`task-queue.ts`) | [SuperAGI](https://github.com/TransformerOptimus/SuperAGI) | Priority-ordered queue with a goal decomposer; executors may enqueue follow-up tasks until the budget drains. |
+
+**Authorisation**: `dast` is marked `dangerous: true`. Only scan assets you own
+or have written permission to test. The tool will never exploit findings — it
+reports them for a human or another defensive tool to triage.
+
+## Advanced weapons (`src/integrations/mcp/`, `src/memory/`, `src/rag/`, `src/orchestration/`, `src/vector-stores/`, `src/integrations/browser/`)
+
+A second defensive / productivity tier built on top of PR #1–#5. Every module
+is opt-in via its own feature flag, soft-fails when its dependency is missing,
+and is unit-tested with injected `fetch` / module loaders so the build never
+forces native binaries or a live service.
+
+| Module | Purpose | Implementation | Feature flag |
+| --- | --- | --- | --- |
+| `integrations/mcp/mcp-gateway.ts` | Policy wrapper around `MCPClient` merging [Lasso MCP Gateway](https://github.com/lasso-security/mcp-gateway) + [Guardian-MCP](https://github.com/Nikdroid-sys/guardian-system) ideas: tool allowlist/denylist, per-tool rate limiting, optional response scanning with `VigilClient` | Native TS (routes `listTools` / `callTool` / `close` through policy gate) | `DOGE_FEATURE_MCP_GATEWAY` |
+| `memory/letta/` | [Letta](https://github.com/letta-ai/letta) (formerly MemGPT) archival-memory adapter matching the `Mem0Adapter` interface | HTTP client against `/v1/agents/{id}/archival-memory` | `DOGE_FEATURE_LETTA` |
+| `memory/zep/` | [Zep](https://github.com/getzep/zep) long-term conversational memory adapter matching the `Mem0Adapter` interface | HTTP client against `/api/v2/sessions/{id}/memory` | `DOGE_FEATURE_ZEP` |
+| `vector-stores/` | Unified `VectorStore` interface plus adapters for [Qdrant](https://github.com/qdrant/qdrant) (REST), [Chroma](https://github.com/chroma-core/chroma) (REST), and [LanceDB](https://github.com/lancedb/lancedb) (native package via dynamic import) — exposed to the agent as a single `vector_store` tool | Backend selected per call via `backend` arg or `VECTOR_STORE_BACKEND` env | `DOGE_FEATURE_VECTOR_STORES` |
+| `rag/` | [LlamaIndex](https://github.com/run-llama/LlamaIndexTS)-backed RAG engine (index / query / answer) and matching `rag` tool | `llamaindex` loaded via dynamic import so the build never requires it | `DOGE_FEATURE_RAG` |
+| `orchestration/skill-planner.ts` | [Semantic Kernel](https://github.com/microsoft/semantic-kernel)-style goal → skill-selection → plan → execute loop, ported to native TypeScript | Pluggable `SkillResolver` (default: deterministic keyword matcher; swap in an LLM-backed one at construction) | `DOGE_FEATURE_SKILL_PLANNER` |
+| `integrations/browser/stagehand-tool.ts` | Second browser engine alongside `browser-use` based on [Stagehand](https://github.com/browserbase/stagehand) (Playwright + LLM), with `navigate` / `act` / `extract` / `observe` primitives | `@browserbasehq/stagehand` loaded via dynamic import | `DOGE_FEATURE_STAGEHAND` |
+| `integrations/mcp/` (external servers) | Connect the existing `MCPClient` to [CodeQL-MCP](https://github.com/JordyZomer/codeql-mcp) and [Semgrep-MCP](https://github.com/VetCoders/mcp-server-semgrep) servers as two additional `mcp` tools, so the agent can drive CodeQL and Semgrep as structured MCP commands instead of shelling out | Wraps the same `MCPClient` type via `CODEQL_MCP_URL` / `SEMGREP_MCP_URL` (or stdio paths) | `DOGE_FEATURE_CODEQL_MCP`, `DOGE_FEATURE_SEMGREP_MCP` |
+
+All keys and URLs live in `.env.example`; every adapter returns a clean
+`{ ok: false, error }` when its service is unreachable so the agent keeps
+running. None of these modules pulls in a heavy native binary at build time —
+LanceDB, LlamaIndex, and Stagehand are only imported when the feature is both
+enabled and actually invoked.
 
 ## Requirements
 
@@ -70,6 +158,11 @@ See [`.env.example`](./.env.example) for the full list. Highlights:
 - `DOGE_PERMISSION_MODE` — `strict` | `default` | `permissive`
 - `DOGE_ALLOW_NETWORK`, `DOGE_ALLOW_WRITES` — hard switches for the web/file tools
 - `DOGE_FEATURE_BUDDY`, `DOGE_FEATURE_KAIROS`, `DOGE_FEATURE_ULTRAPLAN`, `DOGE_FEATURE_COORDINATOR`, `DOGE_FEATURE_BRIDGE` — experimental modules
+- `DOGE_FEATURE_ADMIN`, `DOGE_FEATURE_BROWSER`, `DOGE_FEATURE_MEM0`, `DOGE_FEATURE_MCP`, `DOGE_FEATURE_ROUTER`, `DOGE_FEATURE_SOCIAL`, `DOGE_FEATURE_OCTOROUTE` — Ultimate Integrations
+- `DOGE_FEATURE_SAST`, `DOGE_FEATURE_DAST`, `DOGE_FEATURE_LOG_ANALYSIS`, `DOGE_FEATURE_IDS` — defensive security tool families
+- `MEM0_API_KEY`, `MCP_SERVER_URL` / `MCP_SERVER_STDIO`, `DOGE_ROUTER_CONFIG`, `OCTOROUTE_URL`, `TELEGRAM_BOT_TOKEN`, `SLACK_BOT_TOKEN` / `SLACK_WEBHOOK_URL` — integration credentials (all optional, every integration fails soft when its key is missing)
+- `SEMGREP_BIN`, `CODEQL_BIN`, `NUCLEI_BIN`, `ZAP_BIN` — override binary lookup for SAST / DAST engines
+- `ELASTIC_URL` + (`ELASTIC_API_KEY` | `ELASTIC_USERNAME`/`ELASTIC_PASSWORD`), `WAZUH_URL` + credentials, `SURICATA_EVE_PATH` — defensive backends
 
 ## Docker
 
@@ -95,7 +188,7 @@ src/
   core/            agent-loop, planner, executor, orchestrator
   api/             provider-interface + anthropic/openai/factory
   memory/          short-term, long-term, summarizer
-  tools/           registry, bash, file, web, sandbox
+  tools/           registry, bash, file, web, sandbox, admin
   tasks/           decomposition, dependency-graph
   agents/          sub-agent-manager, communication bus
   cli/             commander CLI + Ink TUI
@@ -105,6 +198,9 @@ src/
   utils/           logger, debug/tracing
   config/          env-loader, paths (~/.doge by default), feature-flags
   features/        BUDDY, KAIROS, ULTRAPLAN, COORDINATOR, BRIDGE (gated)
+  integrations/    browser, mem0, mcp, social, router, openclaw, local-llm
+  security/        sast (Semgrep, CodeQL), dast (Nuclei, ZAP),
+                   log-analysis (Elasticsearch, Wazuh), ids (Suricata)
 tests/
   unit/            unit tests
   integration/     integration tests
@@ -118,6 +214,28 @@ workspace/         default sandbox root (mounted as a Docker volume)
 npm run build       # required once, because tests import the compiled dist
 npm test
 ```
+
+## End-to-end security smoke demo
+
+`npm run demo:security` exercises a four-stage defensive workflow that
+touches the vector store, the log-parsing layer, the correlation step, and
+the container scanner. It seeds three real attack signatures (Log4Shell,
+SSH brute-force, sudo privilege escalation) into a Chroma collection, parses
+a sample syslog feed, correlates every suspicious event back to its
+signature via cosine similarity, and then runs Grype against a public
+container image. The run writes `cybersecurity-demo-report.md` in the
+current working directory. A sample report is committed at
+[`docs/cybersecurity-demo-report.md`](docs/cybersecurity-demo-report.md).
+
+```bash
+CHROMA_URL=http://localhost:8000 \
+DOGE_DEMO_IMAGE=alpine:3.14 \
+npm run demo:security
+```
+
+Chroma and Grype are optional. Missing components are recorded as warnings
+in the report, and the correlation stage falls back to an in-memory
+cosine search so the run always produces a concrete artefact.
 
 ## Integrated components
 

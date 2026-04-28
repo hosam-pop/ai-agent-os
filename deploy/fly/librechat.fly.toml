@@ -1,0 +1,85 @@
+# ============================================================================
+# Fly.io config — LibreChat (OIDC via Keycloak)
+#
+# Required secrets:
+#   MONGO_URI                         mongodb+srv://.../LibreChat  (or fly-hosted)
+#   MEILI_HOST                        https://ai-agent-os-meili.fly.dev
+#   MEILI_MASTER_KEY
+#   OPENID_CLIENT_ID                  ai-agent-os-librechat
+#   OPENID_CLIENT_SECRET              (from Keycloak client credentials)
+#   OPENID_ISSUER                     https://ai-agent-os-keycloak.fly.dev/realms/ai-agent-os
+#   OPENID_SESSION_SECRET
+#   CREDS_KEY, CREDS_IV, JWT_SECRET, JWT_REFRESH_SECRET
+# ============================================================================
+
+app = "ai-agent-os-librechat"
+primary_region = "fra"
+kill_signal = "SIGTERM"
+kill_timeout = "10s"
+
+[build]
+  # Custom image that bundles /app/librechat.yaml so agent tooling, role
+  # permissions, and custom endpoints ship with every deploy. See
+  # deploy/docker/Dockerfile.librechat for what we layer on top of upstream.
+  # Paths are resolved relative to this fly.toml; `../../` points back to the
+  # repo root so the Dockerfile's `COPY deploy/...` lines work.
+  dockerfile = "../../deploy/docker/Dockerfile.librechat"
+
+[deploy]
+  strategy = "rolling"
+
+[env]
+  HOST = "0.0.0.0"
+  PORT = "3080"
+  DOMAIN_CLIENT = "https://ai-agent-os-librechat.fly.dev"
+  DOMAIN_SERVER = "https://ai-agent-os-librechat.fly.dev"
+  ALLOW_EMAIL_LOGIN = "false"
+  ALLOW_REGISTRATION = "false"
+  ALLOW_SOCIAL_LOGIN = "true"
+  ALLOW_SOCIAL_REGISTRATION = "true"
+  OPENID_SCOPE = "openid profile email"
+  OPENID_CALLBACK_URL = "/oauth/openid/callback"
+  OPENID_REQUIRED_ROLE = "agent-user"
+  # Role claim lives in the access token at `realm_access.roles` for Keycloak.
+  # Without these two vars, LibreChat logs `Key 'undefined' not found in undefined token!`
+  # and every OIDC callback fails with "Authentication failed".
+  OPENID_REQUIRED_ROLE_TOKEN_KIND = "access"
+  OPENID_REQUIRED_ROLE_PARAMETER_PATH = "realm_access.roles"
+  OPENID_BUTTON_LABEL = "Sign in with AI Agent OS"
+  # Point agents' web_search capability at our self-hosted SearXNG app. The
+  # public URL works over the Fly edge; internal 6PN would be slightly faster
+  # but requires both apps to stay in the same region family.
+  SEARXNG_INSTANCE_URL = "https://ai-agent-os-searxng.fly.dev"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3080
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "requests"
+    hard_limit = 200
+    soft_limit = 150
+
+  [[services.http_checks]]
+    interval = "20s"
+    timeout = "5s"
+    grace_period = "60s"
+    method = "get"
+    path = "/api/config"
+    protocol = "http"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "1024mb"
