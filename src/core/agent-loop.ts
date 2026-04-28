@@ -7,6 +7,7 @@ import { hooks } from '../hooks/lifecycle-hooks.js';
 import { logger } from '../utils/logger.js';
 import { loadEnv } from '../config/env-loader.js';
 import { withSpan } from '../utils/debug.js';
+import { AutoHealingManager } from '../auto-healing/index.js';
 
 export interface AgentLoopOptions {
   provider: AIProvider;
@@ -43,6 +44,7 @@ export class AgentLoop {
   private readonly systemPrompt: string;
   private readonly maxIterations: number;
   private readonly memory: ShortTermMemory;
+  private readonly autoHealing: AutoHealingManager;
 
   constructor(opts: AgentLoopOptions) {
     this.provider = opts.provider;
@@ -50,8 +52,15 @@ export class AgentLoop {
     this.executor = opts.executor;
     this.model = opts.model;
     this.systemPrompt = opts.systemPrompt;
-    this.maxIterations = opts.maxIterations ?? loadEnv().DOGE_MAX_ITERATIONS;
-    this.memory = opts.memory ?? new ShortTermMemory(loadEnv().DOGE_CONTEXT_TOKEN_BUDGET);
+    const env = loadEnv();
+    this.maxIterations = opts.maxIterations ?? env.DOGE_MAX_ITERATIONS;
+    this.memory = opts.memory ?? new ShortTermMemory(env.DOGE_CONTEXT_TOKEN_BUDGET);
+    this.autoHealing = new AutoHealingManager({
+      maxRetries: env.DOGE_AUTO_HEALING_MAX_RETRIES,
+      initialDelayMs: env.DOGE_AUTO_HEALING_INITIAL_DELAY_MS,
+      circuitBreakerThreshold: env.DOGE_AUTO_HEALING_CB_THRESHOLD,
+      circuitBreakerResetMs: env.DOGE_AUTO_HEALING_CB_RESET_MS,
+    });
   }
 
   async run(goal: string): Promise<AgentRunResult> {
@@ -72,13 +81,23 @@ export class AgentLoop {
         iterations = i + 1;
         await this.maybeCompressContext();
 
-        const completion = await this.provider.complete({
-          model: this.model,
-          system: this.systemPrompt,
-          messages: this.memory.snapshot(),
-          tools: this.tools.toSchemas(),
-          maxTokens: 4096,
-        });
+        const completion = await this.autoHealing.handleFailure(
+          () =>
+            this.provider.complete({
+              model: this.model,
+              system: this.systemPrompt,
+              messages: this.memory.snapshot(),
+              tools: this.tools.toSchemas(),
+              maxTokens: 4096,
+            }),
+          this.provider.name,
+          {
+            onCompress: () => this.maybeCompressContext(),
+            onRephrase: (msg) => {
+              this.memory.append({ role: 'user', content: msg });
+            },
+          },
+        );
         usage.inputTokens += completion.usage.inputTokens;
         usage.outputTokens += completion.usage.outputTokens;
 

@@ -125,6 +125,12 @@ const EnvSchema = z.object({
   DOGE_MAX_PARALLEL_TASKS: z.coerce.number().int().positive().default(4),
   DOGE_CONTEXT_TOKEN_BUDGET: z.coerce.number().int().positive().default(120_000),
 
+  DOGE_AUTO_HEALING_ENABLED: z.coerce.boolean().default(true),
+  DOGE_AUTO_HEALING_MAX_RETRIES: z.coerce.number().int().nonnegative().default(3),
+  DOGE_AUTO_HEALING_INITIAL_DELAY_MS: z.coerce.number().int().nonnegative().default(1000),
+  DOGE_AUTO_HEALING_CB_THRESHOLD: z.coerce.number().int().positive().default(5),
+  DOGE_AUTO_HEALING_CB_RESET_MS: z.coerce.number().int().positive().default(60_000),
+
   SEMGREP_BIN: z.string().optional(),
   CODEQL_BIN: z.string().optional(),
   BEARER_BIN: z.string().optional(),
