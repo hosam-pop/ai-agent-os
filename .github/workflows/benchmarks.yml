@@ -1,0 +1,75 @@
+name: Performance Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: 'Use baseline comparison'
+        required: false
+        default: 'true'
+
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM
+
+jobs:
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm run build
+
+      - name: Run benchmarks
+        run: |
+          echo "# Performance Benchmarks" > benchmark-results.md
+          echo "" >> benchmark-results.md
+          echo "## Timestamp" >> benchmark-results.md
+          echo "\`$(date -u)\`" >> benchmark-results.md
+          echo "" >> benchmark-results.md
+          echo "## Build Time" >> benchmark-results.md
+          time pnpm run build 2>&1 | tee build-time.txt
+          echo "Build completed" >> benchmark-results.md
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-results.md
+
+  lighthouse:
+    name: Lighthouse Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          urls: |
+            https://your-app.fly.dev/
+          budgetPath: ./lighthouse-budget.json
+          uploadArtifacts: true
+          temporaryPublicStorage: true
