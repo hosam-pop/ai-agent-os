@@ -27,6 +27,8 @@ RUN pip install --upgrade pip \
         "mcp>=1.2.0" \
         "scrapling>=0.2" \
         "lxml>=5.2" \
+        "cssselect>=1.2" \
+        "httpx>=0.27" \
         "curl_cffi>=0.7"
 
 COPY app ./app

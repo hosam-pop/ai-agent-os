@@ -205,47 +205,66 @@ def scrape_url(
         return {"error": "url must be an absolute http(s) URL"}
 
     note = ""
-    page = None
-    try:
-        if js:
-            try:
-                from scrapling.fetchers import StealthyFetcher  # type: ignore
-                page = StealthyFetcher.fetch(url, headless=True, timeout=timeout_int * 1000)
-            except Exception as exc:  # browser missing or fetch failed
-                note = f"js mode unavailable ({exc.__class__.__name__}); falling back to HTTP fetcher"
-                from scrapling.fetchers import Fetcher  # type: ignore
-                page = Fetcher.get(url, timeout=timeout_int)
-        else:
-            from scrapling.fetchers import Fetcher  # type: ignore
-            page = Fetcher.get(url, timeout=timeout_int)
-    except Exception as exc:
-        return {"error": f"scrapling failed: {exc.__class__.__name__}: {exc}"}
+    status: int | None = None
+    body = ""
+    tree = None
 
-    status = getattr(page, "status", None) or getattr(page, "status_code", None)
-    text_attr = getattr(page, "text", None)
-    if callable(text_attr):
+    # JS mode tries Scrapling's StealthyFetcher (Playwright-backed). The slim
+    # image doesn't ship a browser runtime, so this raises and we fall back to
+    # the plain HTTP path with a clear note. Plain HTTP uses httpx + lxml so we
+    # never touch Scrapling's import-time playwright dependency.
+    if js:
         try:
-            text_value = text_attr()
-        except Exception:
-            text_value = ""
-    else:
-        text_value = text_attr or ""
-    body = (text_value or "")[: SCRAPE_MAX_BYTES * 4]
+            from scrapling.fetchers import StealthyFetcher  # type: ignore
+            page = StealthyFetcher.fetch(url, headless=True, timeout=timeout_int * 1000)
+            status = getattr(page, "status", None) or getattr(page, "status_code", None)
+            text_attr = getattr(page, "text", None)
+            body = (text_attr() if callable(text_attr) else (text_attr or "")) or ""
+            try:
+                from lxml import html as lxml_html  # type: ignore
+                tree = lxml_html.fromstring(body) if body else None
+            except Exception:
+                tree = None
+        except Exception as exc:
+            note = f"js mode unavailable ({exc.__class__.__name__}); fell back to HTTP fetcher"
+
+    if tree is None and not body:
+        try:
+            import httpx  # type: ignore
+            with httpx.Client(follow_redirects=True, timeout=timeout_int) as client:
+                resp = client.get(url, headers={"User-Agent": "ai-agent-os-sandbox/1.0"})
+                status = resp.status_code
+                body = resp.text or ""
+            try:
+                from lxml import html as lxml_html  # type: ignore
+                tree = lxml_html.fromstring(body) if body else None
+            except Exception:
+                tree = None
+        except Exception as exc:
+            return {"error": f"http fetch failed: {exc.__class__.__name__}: {exc}"}
+
     selector_results: dict[str, str | None] = {}
-    if selectors:
+    if selectors and tree is not None:
+        try:
+            from lxml.cssselect import CSSSelector  # type: ignore
+        except Exception:
+            CSSSelector = None  # type: ignore
+
         for name, sel in selectors.items():
-            if not isinstance(sel, str):
+            if not isinstance(sel, str) or CSSSelector is None:
+                selector_results[name] = None
                 continue
             try:
-                hit = page.css_first(sel)
-                selector_results[name] = (hit.text.strip() if hit else None)
+                hits = CSSSelector(sel)(tree)
+                selector_results[name] = (hits[0].text_content().strip() if hits else None)
             except Exception:
                 selector_results[name] = None
+
     return {
         "url": url,
         "status": status,
         "selectors": selector_results,
-        "text": _truncate(body),
+        "text": _truncate(body[: SCRAPE_MAX_BYTES * 4]),
         "note": note,
     }
 
