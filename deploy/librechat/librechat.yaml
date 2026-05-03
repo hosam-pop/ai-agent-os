@@ -186,19 +186,31 @@ endpoints:
 # id `code_sandbox` and gated by the `sandbox.run` capability in /admin/keys.
 # -----------------------------------------------------------------------------
 mcpServers:
+  # Code execution + Scrapling (web.scrape) + OpenCLI (cli.run) all live in
+  # the same sandbox image, exposed as separate `tools/list` entries.
   code-sandbox:
     type: streamable-http
     url: '${SANDBOX_MCP_URL}'
     timeout: 60000
     headers:
       Authorization: 'Bearer ${SANDBOX_TOKEN}'
-# `key-manager` (Phase B) will be added once that sidecar is deployed; leaving
-# it commented avoids boot-time "Invalid URL" crashes when the secret is not
-# yet configured.
-# mcpServers:
-#   key-manager:
-#     type: streamable-http
-#     url: '${KEY_MANAGER_MCP_URL}'
-#     timeout: 30000
-#     headers:
-#       Authorization: 'Bearer ${KEY_MANAGER_MCP_TOKEN}'
+  # Admin self-service (set keys, create users, manage permissions) — backed
+  # by the gateway at /admin-mcp. Gated by the `admin.manage` capability.
+  admin-ops:
+    type: streamable-http
+    url: '${ADMIN_MCP_URL}'
+    timeout: 30000
+    headers:
+      Authorization: 'Bearer ${ADMIN_MCP_TOKEN}'
+  # SocratiCode — Socratic code review / repo reasoning. Runs as a stdio
+  # subprocess (npm package). The `code.review` capability gates its tool ids.
+  socraticode:
+    command: npx
+    args:
+      - '-y'
+      - 'socraticode-mcp'
+    timeout: 120000
+    env:
+      OPENAI_API_KEY: '${OPENAI_API_KEY}'
+      ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
+      GOOGLE_API_KEY: '${GOOGLE_KEY}'

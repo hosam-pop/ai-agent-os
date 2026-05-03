@@ -6,6 +6,7 @@ export type ProviderId =
   | 'gemini'
   | 'openai'
   | 'anthropic'
+  | 'deepseek'
   | 'serper'
   | 'github';
 
@@ -85,6 +86,17 @@ export const PROVIDERS: ProviderDescriptor[] = [
         'anthropic-version': '2023-06-01',
       });
       if (r.ok) return { ok: true, note: 'Anthropic accepted the key' };
+      return { ok: false, note: `HTTP ${r.status}` };
+    },
+  },
+  {
+    id: 'deepseek',
+    label: 'DeepSeek',
+    hint: 'Used as a low-cost reasoning fallback. From platform.deepseek.com/api_keys.',
+    validate: (v) => (/^sk-[\w-]{20,}$/.test(v) ? null : 'Expected sk-… token'),
+    async testKey(value) {
+      const r = await getURL('https://api.deepseek.com/v1/models', { authorization: `Bearer ${value}` });
+      if (r.ok) return { ok: true, note: 'DeepSeek accepted the key' };
       return { ok: false, note: `HTTP ${r.status}` };
     },
   },

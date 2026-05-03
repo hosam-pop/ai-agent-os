@@ -158,6 +158,183 @@ def integrations_status() -> dict[str, bool]:
     return {
         "github": bool(os.environ.get("GITHUB_PAT")),
         "gemini": bool(os.environ.get("GEMINI_API_KEY")),
+        "scrapling": _scrapling_available(),
+    }
+
+
+def _scrapling_available() -> bool:
+    try:
+        import scrapling  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+SCRAPE_MAX_BYTES = 64 * 1024
+
+
+@mcp.tool()
+def scrape_url(
+    url: str,
+    selectors: dict[str, str] | None = None,
+    js: bool = False,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Fetch a page and return cleaned text + values for any CSS selectors.
+
+    Powered by Scrapling (https://github.com/D4Vinci/Scrapling). The default
+    mode uses the lightweight HTTP Fetcher; when ``js=True`` the agent asks
+    for the StealthyFetcher (Playwright-based) which only works on images
+    that have ``playwright install`` baked in.
+
+    Args:
+        url: Absolute URL to fetch.
+        selectors: Optional ``{name: css_selector}`` map; the response includes
+            ``selectors`` with the first matching text per name.
+        js: When true, render the page through a headless browser to handle
+            JS-heavy sites. Falls back to the HTTP fetcher with a clear note
+            if the browser runtime isn't installed.
+        timeout: Hard wall-clock limit in seconds (1..120).
+    """
+    try:
+        timeout_int = max(1, min(int(timeout), MAX_TIMEOUT_SECONDS))
+    except (TypeError, ValueError):
+        timeout_int = DEFAULT_TIMEOUT_SECONDS
+
+    if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+        return {"error": "url must be an absolute http(s) URL"}
+
+    note = ""
+    page = None
+    try:
+        if js:
+            try:
+                from scrapling.fetchers import StealthyFetcher  # type: ignore
+                page = StealthyFetcher.fetch(url, headless=True, timeout=timeout_int * 1000)
+            except Exception as exc:  # browser missing or fetch failed
+                note = f"js mode unavailable ({exc.__class__.__name__}); falling back to HTTP fetcher"
+                from scrapling.fetchers import Fetcher  # type: ignore
+                page = Fetcher.get(url, timeout=timeout_int)
+        else:
+            from scrapling.fetchers import Fetcher  # type: ignore
+            page = Fetcher.get(url, timeout=timeout_int)
+    except Exception as exc:
+        return {"error": f"scrapling failed: {exc.__class__.__name__}: {exc}"}
+
+    status = getattr(page, "status", None) or getattr(page, "status_code", None)
+    text_attr = getattr(page, "text", None)
+    if callable(text_attr):
+        try:
+            text_value = text_attr()
+        except Exception:
+            text_value = ""
+    else:
+        text_value = text_attr or ""
+    body = (text_value or "")[: SCRAPE_MAX_BYTES * 4]
+    selector_results: dict[str, str | None] = {}
+    if selectors:
+        for name, sel in selectors.items():
+            if not isinstance(sel, str):
+                continue
+            try:
+                hit = page.css_first(sel)
+                selector_results[name] = (hit.text.strip() if hit else None)
+            except Exception:
+                selector_results[name] = None
+    return {
+        "url": url,
+        "status": status,
+        "selectors": selector_results,
+        "text": _truncate(body),
+        "note": note,
+    }
+
+
+CLI_TOOL_ALLOWLIST = {
+    "git",
+    "gh",
+    "curl",
+    "wget",
+    "ls",
+    "cat",
+    "head",
+    "tail",
+    "grep",
+    "find",
+    "jq",
+    "node",
+    "npm",
+    "npx",
+    "python3",
+    "pip",
+    "uv",
+    "bun",
+    "pnpm",
+    "yarn",
+}
+
+
+@mcp.tool()
+def cli_run(
+    tool: str,
+    args: list[str] | None = None,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+    stdin: str | None = None,
+) -> dict[str, Any]:
+    """Run an allow-listed CLI tool with explicit args (no shell expansion).
+
+    Inspired by https://github.com/jackwener/OpenCLI — gives the agent a
+    deterministic CLI surface that's safer than ``run_code(language='bash')``
+    because the binary name is checked against ``CLI_TOOL_ALLOWLIST`` and
+    arguments are passed through ``execvp`` (no shell metacharacters).
+    """
+    if tool not in CLI_TOOL_ALLOWLIST:
+        return {
+            "error": f"tool not allow-listed: {tool}",
+            "allowed": sorted(CLI_TOOL_ALLOWLIST),
+        }
+    cleaned_args: list[str] = []
+    for a in args or []:
+        if not isinstance(a, str):
+            return {"error": "all args must be strings"}
+        if any(ch in a for ch in ("\x00",)):
+            return {"error": "args must not contain NUL bytes"}
+        cleaned_args.append(a)
+    try:
+        timeout_int = max(1, min(int(timeout), MAX_TIMEOUT_SECONDS))
+    except (TypeError, ValueError):
+        timeout_int = DEFAULT_TIMEOUT_SECONDS
+
+    with tempfile.TemporaryDirectory(prefix="aaos-cli-") as cwd:
+        try:
+            proc = subprocess.run(
+                [tool, *cleaned_args],
+                cwd=cwd,
+                env=_build_child_env(),
+                input=stdin,
+                capture_output=True,
+                text=True,
+                timeout=timeout_int,
+                check=False,
+            )
+        except FileNotFoundError:
+            return {"error": f"tool not installed in sandbox: {tool}"}
+        except subprocess.TimeoutExpired as exc:
+            return {
+                "tool": tool,
+                "stdout": _truncate(exc.stdout or ""),
+                "stderr": _truncate(exc.stderr or ""),
+                "exitCode": None,
+                "timedOut": True,
+                "timeoutSeconds": timeout_int,
+            }
+    return {
+        "tool": tool,
+        "args": cleaned_args,
+        "stdout": _truncate(proc.stdout),
+        "stderr": _truncate(proc.stderr),
+        "exitCode": proc.returncode,
+        "timedOut": False,
     }
 
 

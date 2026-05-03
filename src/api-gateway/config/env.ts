@@ -53,6 +53,10 @@ const GatewayEnvSchema = z.object({
   // Legacy break-glass password from before SSO; ignored when set, kept here so
   // existing Fly secrets don't fail validation. Will be removed in a follow-up.
   KEYS_ADMIN_PASSWORD: z.string().optional(),
+  // Bearer token required to call /admin-mcp (the Manager-Agent surface that
+  // exposes admin operations as MCP tools). Set to a strong random value and
+  // share it with LibreChat as ADMIN_MCP_TOKEN.
+  ADMIN_MCP_TOKEN: z.string().optional(),
 });
 
 export type GatewayEnv = z.infer<typeof GatewayEnvSchema>;

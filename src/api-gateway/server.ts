@@ -7,6 +7,7 @@ import { registerSecurityHeaders } from './middleware/security-headers.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerProxyRoute } from './routes/proxy.js';
 import { registerAdminKeysRoutes } from './admin/admin-routes.js';
+import { registerAdminMcpRoute } from './admin/admin-mcp.js';
 
 export interface GatewayOptions {
   env?: GatewayEnv;
@@ -96,7 +97,7 @@ export async function buildGateway(opts: GatewayOptions = {}): Promise<FastifyIn
     });
   }
 
-  await registerAdminKeysRoutes(app, {
+  const adminCtx = await registerAdminKeysRoutes(app, {
     masterKey: env.KEYS_MASTER_KEY,
     keycloakIssuer: env.KEYCLOAK_ISSUER,
     keycloakAdminClientId: env.KEYCLOAK_ADMIN_BRIDGE_CLIENT_ID,
@@ -108,6 +109,20 @@ export async function buildGateway(opts: GatewayOptions = {}): Promise<FastifyIn
     librechatMongoUri: env.LIBRECHAT_MONGO_URI,
     managerAgentId: env.MANAGER_AGENT_ID,
   });
+
+  if (adminCtx) {
+    await registerAdminMcpRoute(app, {
+      bearerToken: env.ADMIN_MCP_TOKEN,
+      deps: {
+        keys: adminCtx.keys,
+        keycloak: adminCtx.keycloak,
+        policies: adminCtx.policies,
+        masterKey: adminCtx.masterKey,
+        librechatMongoUri: env.LIBRECHAT_MONGO_URI,
+        managerAgentId: env.MANAGER_AGENT_ID,
+      },
+    });
+  }
 
   return app;
 }

@@ -39,10 +39,17 @@ export interface AdminKeysRoutesOptions {
 const DEFAULT_STORE_PATH = '/data/admin-keys.json';
 const DEFAULT_POLICIES_PATH = '/data/admin-policies.json';
 
+export interface AdminContext {
+  keys: ReturnType<typeof createFileKeysStore>;
+  keycloak: KeycloakAdmin;
+  policies: ReturnType<typeof createFilePoliciesStore>;
+  masterKey: string;
+}
+
 export async function registerAdminKeysRoutes(
   app: FastifyInstance,
   opts: AdminKeysRoutesOptions,
-): Promise<void> {
+): Promise<AdminContext | null> {
   const masterKey = opts.masterKey;
   const issuer = opts.keycloakIssuer;
   const adminClientId = opts.keycloakAdminClientId;
@@ -55,7 +62,7 @@ export async function registerAdminKeysRoutes(
     app.get('/admin/keys', async (_req, reply) => {
       reply.code(503).type('text/html').send(renderDisabledPage());
     });
-    return;
+    return null;
   }
 
   const keycloak = new KeycloakAdmin({
@@ -417,6 +424,8 @@ export async function registerAdminKeysRoutes(
     { providers: PROVIDERS.length, capabilities: CAPABILITIES.length },
     'admin keys panel registered at /admin/keys (SSO-gated)',
   );
+
+  return { keys: store, keycloak, policies, masterKey };
 }
 
 function parseJSONBody(req: FastifyRequest): Record<string, unknown> {

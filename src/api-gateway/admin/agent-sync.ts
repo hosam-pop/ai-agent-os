@@ -26,6 +26,12 @@ export const CAPABILITY_TO_TOOL: Readonly<Record<string, string>> = Object.freez
   // manager agent's MongoDB `tools` array; LibreChat then stops advertising
   // the tool to Gemini on the next conversation turn.
   'sandbox.run': 'code_sandbox',
+  // Newer agentic surfaces — each maps to a single MCP server tool group
+  // that LibreChat surfaces to the agent when the capability is ON.
+  'web.scrape': 'web_scrape',
+  'cli.run': 'opencli',
+  'code.review': 'socraticode',
+  'admin.manage': 'admin_ops',
 });
 
 // Tools the manager agent should always carry regardless of policy. `artifacts`
