@@ -8,7 +8,6 @@ on:
 
 env:
   NODE_VERSION: '20'
-  PNPM_VERSION: '9'
 
 jobs:
   lint-and-typecheck:
@@ -20,25 +19,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
       - name: Run ESLint
-        run: pnpm run lint || echo "No lint script defined"
+        run: npm run lint --if-present || echo "No lint script defined"
 
       - name: Type check
-        run: pnpm run typecheck
+        run: npm run typecheck
 
   unit-tests:
     name: Unit Tests
@@ -55,25 +49,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
       - name: Build project
-        run: pnpm run build
+        run: npm run build
 
       - name: Run unit tests
-        run: pnpm run test:unit
+        run: npm run test:unit
         env:
           MONGODB_URI: mongodb://localhost:27017
           MONGODB_DB: ai-agent-os-test
@@ -94,25 +83,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
       - name: Build project
-        run: pnpm run build
+        run: npm run build
 
       - name: Run integration tests
-        run: pnpm run test:integration
+        run: npm run test:integration
         env:
           MONGODB_URI: mongodb://localhost:27017
           MONGODB_DB: ai-agent-os-test
@@ -128,22 +112,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'pnpm'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
       - name: Run npm audit
-        run: pnpm audit --audit-level=high || true
+        run: npm audit --audit-level=high || true
 
   build-docker:
     name: Build Docker Image
