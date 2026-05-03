@@ -357,6 +357,95 @@ def cli_run(
     }
 
 
+GITHUB_API_BASE = "https://api.github.com"
+GITHUB_ALLOWED_METHODS = {"GET", "POST", "PATCH", "PUT", "DELETE"}
+
+
+@mcp.tool()
+def github_call(
+    method: str,
+    path: str,
+    body: dict[str, Any] | None = None,
+    token: str | None = None,
+    timeout: int = 30,
+) -> dict[str, Any]:
+    """Call any GitHub REST API v3 endpoint with the operator's PAT.
+
+    Args:
+        method: HTTP verb (GET / POST / PATCH / PUT / DELETE).
+        path:   API path beginning with ``/`` — e.g. ``/repos/owner/repo/issues``.
+                Absolute URLs to ``api.github.com`` are also accepted.
+        body:   Optional JSON request body for non-GET verbs.
+        token:  Override PAT for this single call. When omitted the server
+                uses the ``GITHUB_PAT`` env var that the gateway pushes via
+                the admin-ops ``set_api_key('github', …)`` flow.
+        timeout: Wall-clock cap (seconds), max 60.
+
+    Returns: ``{ status, ok, json|text, rate_limit }`` — the agent never
+    receives the raw token back.
+    """
+    import json as _json
+
+    import httpx  # imported here so unrelated tools don't pay the cost.
+
+    verb = (method or "").upper().strip()
+    if verb not in GITHUB_ALLOWED_METHODS:
+        return {"error": f"method not allowed: {verb!r}", "allowed": sorted(GITHUB_ALLOWED_METHODS)}
+
+    cleaned_path = (path or "").strip()
+    if cleaned_path.startswith("https://api.github.com"):
+        url = cleaned_path
+    elif cleaned_path.startswith("/"):
+        url = f"{GITHUB_API_BASE}{cleaned_path}"
+    else:
+        return {"error": "path must start with '/' or be a full https://api.github.com URL"}
+
+    pat = token or os.environ.get("GITHUB_PAT") or os.environ.get("GITHUB_TOKEN")
+    if not pat:
+        return {
+            "error": "no GitHub PAT available",
+            "hint": "ask the operator to call admin-ops.set_api_key(provider='github', value=<PAT>) — or pass `token` explicitly.",
+        }
+
+    try:
+        timeout_int = max(1, min(int(timeout), 60))
+    except (TypeError, ValueError):
+        timeout_int = 30
+
+    headers = {
+        "accept": "application/vnd.github+json",
+        "authorization": f"Bearer {pat}",
+        "x-github-api-version": "2022-11-28",
+        "user-agent": "ai-agent-os-sandbox",
+    }
+    try:
+        with httpx.Client(timeout=timeout_int, follow_redirects=True) as client:
+            resp = client.request(verb, url, headers=headers, json=body if body is not None else None)
+    except httpx.HTTPError as exc:
+        return {"error": f"github request failed: {exc}"}
+
+    rate = {
+        "limit": resp.headers.get("x-ratelimit-limit"),
+        "remaining": resp.headers.get("x-ratelimit-remaining"),
+        "reset": resp.headers.get("x-ratelimit-reset"),
+    }
+    payload: Any
+    text = resp.text or ""
+    try:
+        payload = _json.loads(text) if text else None
+    except ValueError:
+        payload = text
+    return {
+        "status": resp.status_code,
+        "ok": 200 <= resp.status_code < 300,
+        "method": verb,
+        "url": url,
+        "json": payload if not isinstance(payload, str) else None,
+        "text": payload if isinstance(payload, str) else None,
+        "rate_limit": rate,
+    }
+
+
 def _expected_token() -> str | None:
     return os.environ.get("SANDBOX_TOKEN")
 

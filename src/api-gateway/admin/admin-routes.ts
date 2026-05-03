@@ -425,6 +425,30 @@ export async function registerAdminKeysRoutes(
     'admin keys panel registered at /admin/keys (SSO-gated)',
   );
 
+  // Startup sync: push the current manager policy (with newly-added defaults
+  // and dynamic instructions) into LibreChat MongoDB so a fresh deploy picks
+  // up the latest tool gating + system prompt without waiting for the admin
+  // to click "Save" in the panel.
+  const librechatMongoUriForBoot = opts.librechatMongoUri;
+  const managerAgentIdForBoot = opts.managerAgentId ?? MANAGER_AGENT_ID;
+  if (librechatMongoUriForBoot) {
+    void (async () => {
+      try {
+        const doc = await policies.load();
+        const manager = doc.agents.find(a => a.agentId === 'manager');
+        if (!manager) return;
+        const result = await syncAgentToolsToMongo({
+          mongoUri: librechatMongoUriForBoot,
+          policy: manager,
+          agentId: managerAgentIdForBoot,
+        });
+        app.log.info({ result }, 'startup agent-sync complete');
+      } catch (err) {
+        app.log.warn({ err }, 'startup agent-sync failed (non-fatal)');
+      }
+    })();
+  }
+
   return { keys: store, keycloak, policies, masterKey };
 }
 

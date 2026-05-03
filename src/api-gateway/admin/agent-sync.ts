@@ -7,6 +7,7 @@
 
 import { MongoClient } from 'mongodb';
 import type { AgentPolicy } from './policies-store.js';
+import { buildSystemPrompt } from './agent-prompt.js';
 
 // Map a policy capability id to a LibreChat-native tool name. Capabilities
 // without an entry here are accepted and persisted, but have no runtime effect
@@ -53,6 +54,7 @@ export interface AgentSyncOk {
   agentId: string;
   toolsBefore: string[];
   toolsAfter: string[];
+  instructionsChanged: boolean;
   changed: boolean;
 }
 
@@ -107,7 +109,7 @@ export async function syncAgentToolsToMongo(opts: AgentSyncOptions): Promise<Age
   try {
     await client.connect();
     const col = client.db(LIBRECHAT_DB).collection(AGENTS_COLLECTION);
-    const before = await col.findOne<{ id: string; tools?: string[] }>({ id: agentId });
+    const before = await col.findOne<{ id: string; tools?: string[]; instructions?: string }>({ id: agentId });
     if (!before) {
       return {
         ok: false,
@@ -118,14 +120,18 @@ export async function syncAgentToolsToMongo(opts: AgentSyncOptions): Promise<Age
       };
     }
     const toolsBefore = Array.isArray(before.tools) ? [...before.tools] : [];
-    const changed = !sameUnordered(toolsBefore, toolsAfter);
+    const instructionsBefore = typeof before.instructions === 'string' ? before.instructions : '';
+    const instructionsAfter = buildSystemPrompt(opts.policy);
+    const toolsChanged = !sameUnordered(toolsBefore, toolsAfter);
+    const instructionsChanged = instructionsBefore !== instructionsAfter;
+    const changed = toolsChanged || instructionsChanged;
     if (changed) {
       await col.updateOne(
         { id: agentId },
-        { $set: { tools: toolsAfter, updatedAt: new Date() } },
+        { $set: { tools: toolsAfter, instructions: instructionsAfter, updatedAt: new Date() } },
       );
     }
-    return { ok: true, agentId, toolsBefore, toolsAfter, changed };
+    return { ok: true, agentId, toolsBefore, toolsAfter, instructionsChanged, changed };
   } catch (err) {
     return {
       ok: false,
