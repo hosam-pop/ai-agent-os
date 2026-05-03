@@ -6,6 +6,11 @@
 FROM oven/bun:1.1 AS builder
 WORKDIR /app
 
+# Native modules (better-sqlite3) need python3 + a C++ toolchain to compile.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first (leverage layer cache).
 COPY package.json ./
 RUN bun install --no-save
@@ -24,6 +29,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV DOGE_HOME=/home/node/.doge
 ENV DOGE_WORKSPACE=/workspace
+
+# Toolchain for native modules in the prod install (better-sqlite3 et al).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy built artifacts and production node_modules layout.
 COPY package.json ./
