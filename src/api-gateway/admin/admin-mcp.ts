@@ -245,11 +245,16 @@ export async function registerAdminMcpRoute(
   }
   const expected = opts.bearerToken;
 
-  const server = buildAdminMcpServer(opts.deps);
-
   // POST handles JSON-RPC initialize/tools/list/tools/call. GET is used by
   // SSE clients to resume notifications; the LibreChat MCP client only POSTs
   // in stateless mode, but we accept GET too for interop.
+  //
+  // We build a fresh McpServer + transport pair *per request*. The MCP SDK's
+  // McpServer stores the active transport on its internal Server instance
+  // (see @modelcontextprotocol/sdk/dist/esm/shared/protocol.js), so reusing
+  // the same server for two sequential requests throws "Already connected to
+  // a transport" on the second connect(). Stateless HTTP means we re-bind
+  // each call — this is also what the upstream Streamable HTTP example does.
   const handler = async (req: FastifyRequest, reply: FastifyReply) => {
     const auth = String(req.headers.authorization ?? '');
     const presented = auth.toLowerCase().startsWith('bearer ')
@@ -259,6 +264,7 @@ export async function registerAdminMcpRoute(
       reply.code(401).send({ error: 'unauthorized' });
       return;
     }
+    const server = buildAdminMcpServer(opts.deps);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     reply.hijack();
     await server.connect(transport);
@@ -266,6 +272,7 @@ export async function registerAdminMcpRoute(
       await transport.handleRequest(req.raw, reply.raw, req.body);
     } finally {
       await transport.close().catch(() => {});
+      await server.close().catch(() => {});
     }
   };
 
