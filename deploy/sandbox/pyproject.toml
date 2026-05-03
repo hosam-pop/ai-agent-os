@@ -13,6 +13,9 @@ dependencies = [
   # dependency surfaces as a tool-level error instead of a boot crash.
   "scrapling>=0.2",
   "lxml>=5.2",
+  # Scrapling's HTTP Fetcher resolves `curl_cffi` at call-time, so bundle it
+  # explicitly to avoid a runtime ModuleNotFoundError on first scrape.
+  "curl_cffi>=0.7",
 ]
 
 [build-system]
