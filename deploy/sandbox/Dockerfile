@@ -24,7 +24,9 @@ RUN pip install --upgrade pip \
  && pip install \
         "fastapi>=0.115" \
         "uvicorn[standard]>=0.30" \
-        "mcp>=1.2.0"
+        "mcp>=1.2.0" \
+        "scrapling>=0.2" \
+        "lxml>=5.2"
 
 COPY app ./app
 

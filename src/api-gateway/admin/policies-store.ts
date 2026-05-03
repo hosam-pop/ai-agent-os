@@ -27,7 +27,12 @@ export const CAPABILITIES = [
   { id: 'shell.run', label: 'Execute shell commands in sandbox', group: 'runtime' },
   { id: 'web.search', label: 'Run web searches', group: 'runtime' },
   { id: 'web.fetch', label: 'Fetch arbitrary URLs', group: 'runtime' },
+  { id: 'web.scrape', label: 'Scrape JS-rendered pages (Scrapling)', group: 'runtime' },
+  { id: 'cli.run', label: 'Drive websites/CLIs through OpenCLI adapters', group: 'runtime' },
+  { id: 'code.review', label: 'Index + reason about repos (SocratiCode)', group: 'runtime' },
   { id: 'sandbox.run', label: 'Run code in execution sandbox', group: 'runtime' },
+  // Admin self-service from chat
+  { id: 'admin.manage', label: 'Manage keys, users, and permissions from chat', group: 'admin' },
 ] as const;
 
 export type CapabilityId = (typeof CAPABILITIES)[number]['id'];
@@ -62,7 +67,11 @@ const DEFAULT_AGENTS: AgentPolicy[] = [
       'shell.run': false,
       'web.search': true,
       'web.fetch': true,
+      'web.scrape': false,
+      'cli.run': false,
+      'code.review': false,
       'sandbox.run': false,
+      'admin.manage': false,
     },
   },
 ];

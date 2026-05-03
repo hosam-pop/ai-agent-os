@@ -7,6 +7,12 @@ dependencies = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
   "mcp>=1.2.0",
+  # web.scrape — Scrapling Fetcher (HTTP + smart parsing). The optional
+  # PlayWrightFetcher / StealthyFetcher modes need a browser install; we
+  # keep the slim install here and lazy-import in app.scrape so a missing
+  # dependency surfaces as a tool-level error instead of a boot crash.
+  "scrapling>=0.2",
+  "lxml>=5.2",
 ]
 
 [build-system]
