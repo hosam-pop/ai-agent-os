@@ -67,11 +67,15 @@ const DEFAULT_AGENTS: AgentPolicy[] = [
       'shell.run': false,
       'web.search': true,
       'web.fetch': true,
-      'web.scrape': false,
-      'cli.run': false,
-      'code.review': false,
-      'sandbox.run': false,
-      'admin.manage': false,
+      // Powerful capabilities — enabled by default so the manager agent can
+      // act on chat-issued instructions immediately. Disable individual
+      // entries from /admin/keys → Agent Permissions if you want to lock the
+      // surface back down.
+      'web.scrape': true,
+      'cli.run': true,
+      'code.review': true,
+      'sandbox.run': true,
+      'admin.manage': true,
     },
   },
 ];
