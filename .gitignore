@@ -19,3 +19,19 @@ pnpm-lock.yaml
 # Python sandbox build artifacts
 __pycache__/
 *.pyc
+
+# Test outputs
+test-results/
+*.test-output.*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Logs
+logs/
+*.log
+
+# Fly.io
+.fly/
