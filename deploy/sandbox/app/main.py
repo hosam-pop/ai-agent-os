@@ -446,6 +446,256 @@ def github_call(
     }
 
 
+# ---------------------------------------------------------------------------
+# Browser automation (Playwright + Chromium).
+#
+# Exposes a single `browser_action` MCP tool that the Manager Agent uses to
+# drive a real browser from chat: open URLs, click elements, type into form
+# fields, take screenshots, run JS, and so on. We keep state in a single
+# module-level Playwright session so the agent can chain multi-step flows
+# (e.g. "log into X, then post a tweet") in one conversation without losing
+# cookies between calls.
+#
+# The session profile lives under /tmp/aaos-browser, which means logins
+# survive only until the Fly machine restarts. That's intentional: long-lived
+# session secrets stay out of the sandbox image. To re-establish a login,
+# the agent calls `browser_action(action='navigate', url=…)` then performs a
+# scripted login (typing username/password from admin-ops keys).
+# ---------------------------------------------------------------------------
+
+BROWSER_PROFILE_DIR = "/tmp/aaos-browser"
+BROWSER_DEFAULT_TIMEOUT_MS = 30_000
+BROWSER_MAX_TIMEOUT_MS = 120_000
+
+_browser_state: dict[str, Any] = {"playwright": None, "context": None, "page": None}
+
+
+async def _ensure_browser_page():
+    """Lazily launch a persistent Chromium context and return the active page.
+
+    Reuses the same browser context across calls so cookies/localStorage
+    persist for the session. Falls back to a clear error if Playwright/Chromium
+    aren't installed (the image ships them pre-installed; local dev may not).
+    """
+    if _browser_state["page"] is not None:
+        return _browser_state["page"]
+    try:
+        from playwright.async_api import async_playwright  # type: ignore
+    except Exception as exc:  # pragma: no cover — exercised only without playwright
+        raise RuntimeError(
+            f"playwright is not installed in this sandbox: {exc.__class__.__name__}"
+        ) from exc
+
+    os.makedirs(BROWSER_PROFILE_DIR, exist_ok=True)
+    pw = await async_playwright().start()
+    context = await pw.chromium.launch_persistent_context(
+        BROWSER_PROFILE_DIR,
+        headless=True,
+        args=["--no-sandbox", "--disable-dev-shm-usage"],
+    )
+    page = context.pages[0] if context.pages else await context.new_page()
+    page.set_default_timeout(BROWSER_DEFAULT_TIMEOUT_MS)
+    _browser_state["playwright"] = pw
+    _browser_state["context"] = context
+    _browser_state["page"] = page
+    return page
+
+
+async def _close_browser() -> None:
+    page = _browser_state.get("page")
+    context = _browser_state.get("context")
+    pw = _browser_state.get("playwright")
+    _browser_state["page"] = None
+    _browser_state["context"] = None
+    _browser_state["playwright"] = None
+    try:
+        if page is not None:
+            try:
+                await page.close()
+            except Exception:
+                pass
+        if context is not None:
+            await context.close()
+        if pw is not None:
+            await pw.stop()
+    except Exception:
+        pass
+
+
+BROWSER_ACTIONS = {
+    "navigate",
+    "click",
+    "type",
+    "press",
+    "extract",
+    "evaluate",
+    "screenshot",
+    "wait_for",
+    "url",
+    "close",
+}
+
+
+@mcp.tool()
+async def browser_action(
+    action: str,
+    url: str | None = None,
+    selector: str | None = None,
+    text: str | None = None,
+    key: str | None = None,
+    script: str | None = None,
+    attribute: str | None = None,
+    full_page: bool = False,
+    clear: bool = False,
+    timeout_ms: int | None = None,
+    wait_for: str | None = None,
+) -> dict[str, Any]:
+    """Drive a real browser (Playwright + Chromium) for full web automation.
+
+    Use this whenever a task requires a logged-in session, JS-rendered UI,
+    or multi-step interaction — for example logging into X/Twitter and
+    posting a tweet, filling a form, scraping a SPA, or taking a screenshot
+    of a dashboard. The session is persistent across calls within the same
+    Fly machine (cookies and localStorage survive), so the agent can chain
+    actions ("navigate → type → click → screenshot") naturally.
+
+    Args:
+        action: One of `navigate`, `click`, `type`, `press`, `extract`,
+            `evaluate`, `screenshot`, `wait_for`, `url`, `close`.
+        url: For `navigate` — the absolute http(s) URL to open.
+        selector: CSS selector for `click`, `type`, `extract`, `wait_for`.
+        text: Text to type for `type` actions.
+        key: Key name for `press` (e.g. `Enter`, `Tab`, `ArrowDown`).
+        script: JavaScript expression to run inside the page for `evaluate`.
+        attribute: For `extract` — return a specific attribute (e.g. `href`)
+            instead of the element's text content.
+        full_page: For `screenshot` — capture the full scroll height when
+            true; otherwise just the visible viewport.
+        clear: For `type` — clear the existing input value first.
+        timeout_ms: Per-action timeout in milliseconds (default 30 000,
+            max 120 000).
+        wait_for: For `navigate` — `load`, `domcontentloaded`, or
+            `networkidle` (default: `load`).
+
+    Returns: A small JSON object describing what happened. Screenshots come
+    back as `screenshotBase64` so the agent can hand them to the user.
+    """
+    if action not in BROWSER_ACTIONS:
+        return {"error": f"unknown action: {action!r}", "allowed": sorted(BROWSER_ACTIONS)}
+
+    if action == "close":
+        await _close_browser()
+        return {"action": "close", "ok": True}
+
+    try:
+        page = await _ensure_browser_page()
+    except RuntimeError as exc:
+        return {"error": str(exc)}
+
+    try:
+        eff_timeout = (
+            max(1, min(int(timeout_ms), BROWSER_MAX_TIMEOUT_MS))
+            if timeout_ms is not None
+            else BROWSER_DEFAULT_TIMEOUT_MS
+        )
+    except (TypeError, ValueError):
+        eff_timeout = BROWSER_DEFAULT_TIMEOUT_MS
+
+    try:
+        if action == "navigate":
+            if not (isinstance(url, str) and url.startswith(("http://", "https://"))):
+                return {"error": "navigate requires an absolute http(s) url"}
+            await page.goto(
+                url,
+                wait_until=wait_for if wait_for in {"load", "domcontentloaded", "networkidle"} else "load",
+                timeout=eff_timeout,
+            )
+            return {"action": "navigate", "url": page.url, "title": await page.title()}
+
+        if action == "click":
+            if not selector:
+                return {"error": "click requires `selector`"}
+            await page.click(selector, timeout=eff_timeout)
+            return {"action": "click", "selector": selector, "url": page.url}
+
+        if action == "type":
+            if not selector:
+                return {"error": "type requires `selector`"}
+            if text is None:
+                return {"error": "type requires `text`"}
+            if clear:
+                await page.fill(selector, "", timeout=eff_timeout)
+            await page.type(selector, text, timeout=eff_timeout)
+            return {"action": "type", "selector": selector, "chars": len(text)}
+
+        if action == "press":
+            if not key:
+                return {"error": "press requires `key`"}
+            target = selector or "body"
+            await page.press(target, key, timeout=eff_timeout)
+            return {"action": "press", "key": key, "selector": target}
+
+        if action == "extract":
+            if not selector:
+                return {"error": "extract requires `selector`"}
+            element = await page.wait_for_selector(selector, timeout=eff_timeout)
+            if element is None:
+                return {"action": "extract", "selector": selector, "value": None}
+            if attribute:
+                value = await element.get_attribute(attribute)
+            else:
+                value = await element.text_content()
+            return {"action": "extract", "selector": selector, "value": value}
+
+        if action == "evaluate":
+            if not script:
+                return {"error": "evaluate requires `script`"}
+            value = await page.evaluate(script)
+            try:
+                serialized = _truncate(_safe_str(value))
+            except Exception:
+                serialized = "<unserializable>"
+            return {"action": "evaluate", "value": serialized}
+
+        if action == "screenshot":
+            png = await page.screenshot(full_page=full_page, timeout=eff_timeout)
+            import base64
+
+            b64 = base64.b64encode(png).decode("ascii")
+            return {
+                "action": "screenshot",
+                "url": page.url,
+                "fullPage": bool(full_page),
+                "bytes": len(png),
+                "screenshotBase64": b64,
+            }
+
+        if action == "wait_for":
+            if not selector:
+                return {"error": "wait_for requires `selector`"}
+            await page.wait_for_selector(selector, timeout=eff_timeout)
+            return {"action": "wait_for", "selector": selector, "url": page.url}
+
+        if action == "url":
+            return {"action": "url", "url": page.url, "title": await page.title()}
+    except Exception as exc:
+        return {"error": f"{exc.__class__.__name__}: {exc}", "action": action}
+
+    return {"error": f"unhandled action: {action}"}
+
+
+def _safe_str(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool)) or value is None:
+        return str(value)
+    try:
+        import json as _json
+        return _json.dumps(value, ensure_ascii=False)
+    except Exception:
+        return str(value)
+
+
 def _expected_token() -> str | None:
     return os.environ.get("SANDBOX_TOKEN")
 

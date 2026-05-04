@@ -40,8 +40,10 @@ export const CAPABILITY_TO_TOOLS: Readonly<Record<string, readonly string[]>> = 
     `github_call${D}code-sandbox`,
   ],
   'web.scrape': [`scrape_url${D}code-sandbox`],
+  'web.browse': [`browser_action${D}code-sandbox`],
   'cli.run': [`cli_run${D}code-sandbox`],
   'code.review': [],
+  'llm.failover': [`chat_failover${D}admin-ops`],
   'admin.manage': [
     `list_api_keys${D}admin-ops`,
     `set_api_key${D}admin-ops`,

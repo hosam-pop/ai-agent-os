@@ -1,8 +1,10 @@
 # Fly.io configuration for the ai-agent-os code-execution sandbox.
 #
-# Tiny worker: shared-cpu-1x / 256 MB RAM is enough for short Python/bash/node
-# snippets called by the Manager Agent. No volumes — every run uses an
-# ephemeral /tmp directory inside the VM.
+# Worker: shared-cpu-1x / 1 GB RAM. Browser automation (Playwright + chromium
+# via the `browser_action` MCP tool) needs more headroom than the previous
+# 256 MB; short Python/bash/node snippets called by the Manager Agent fit
+# comfortably in the same VM. No volumes — every run uses an ephemeral /tmp
+# directory inside the VM, including the browser session profile.
 
 app = "ai-agent-os-sandbox"
 primary_region = "fra"
@@ -31,6 +33,6 @@ primary_region = "fra"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "256mb"
+  memory = "1gb"
   cpu_kind = "shared"
   cpus = 1

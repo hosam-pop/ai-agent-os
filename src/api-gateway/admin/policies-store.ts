@@ -28,9 +28,12 @@ export const CAPABILITIES = [
   { id: 'web.search', label: 'Run web searches', group: 'runtime' },
   { id: 'web.fetch', label: 'Fetch arbitrary URLs', group: 'runtime' },
   { id: 'web.scrape', label: 'Scrape JS-rendered pages (Scrapling)', group: 'runtime' },
+  { id: 'web.browse', label: 'Drive a real browser (Playwright): login, click, post, screenshot', group: 'runtime' },
   { id: 'cli.run', label: 'Drive websites/CLIs through OpenCLI adapters', group: 'runtime' },
   { id: 'code.review', label: 'Index + reason about repos (SocratiCode)', group: 'runtime' },
   { id: 'sandbox.run', label: 'Run code in execution sandbox', group: 'runtime' },
+  // LLM resilience
+  { id: 'llm.failover', label: 'Auto-failover between Gemini / DeepSeek / OpenAI / Anthropic', group: 'runtime' },
   // Admin self-service from chat
   { id: 'admin.manage', label: 'Manage keys, users, and permissions from chat', group: 'admin' },
 ] as const;
@@ -72,9 +75,11 @@ const DEFAULT_AGENTS: AgentPolicy[] = [
       // entries from /admin/keys → Agent Permissions if you want to lock the
       // surface back down.
       'web.scrape': true,
+      'web.browse': true,
       'cli.run': true,
       'code.review': true,
       'sandbox.run': true,
+      'llm.failover': true,
       'admin.manage': true,
     },
   },
