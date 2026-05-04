@@ -78,8 +78,10 @@ const TOOL_DOCS: ToolEntry[] = [
     capability: 'code.review',
     toolName: 'socraticode',
     shortLabel: 'code review',
-    bullet:
-      '`socraticode_*` — Socratic code review / repo reasoning. Best for "why is this slow?" / "what does this PR change?" style questions.',
+    bullet: [
+      '`codebase_*` (SocratiCode) — local codebase indexing, semantic search, and dependency graphs over stdio. Tools include `codebase_index`, `codebase_search`, `codebase_symbols`, `codebase_impact`, `codebase_flow`, `codebase_graph_build`, `codebase_graph_query`, `codebase_graph_circular`, `codebase_graph_visualize`, `codebase_context_search`, plus introspection (`codebase_about`, `codebase_health`, `codebase_list_projects`).',
+      'Heavy tools (index/search/graph build) need a local Docker + Qdrant + Ollama stack. Without them call `codebase_health` first and fall back to read-only tools (`codebase_about`, `codebase_list_projects`) or the sandbox-side `cli_run` / `run_code` instead.',
+    ].join('\n'),
   },
   {
     capability: 'code.read',
