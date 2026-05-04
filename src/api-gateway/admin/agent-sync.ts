@@ -9,31 +9,65 @@ import { MongoClient } from 'mongodb';
 import type { AgentPolicy } from './policies-store.js';
 import { buildSystemPrompt } from './agent-prompt.js';
 
-// Map a policy capability id to a LibreChat-native tool name. Capabilities
-// without an entry here are accepted and persisted, but have no runtime effect
-// yet — they are placeholders for follow-up PRs (GitHub MCP, key-management
-// MCP, shell sandbox MCP, …) that will register matching tools.
+// LibreChat agent runtime resolves tool names in two ways:
+//   1. First-class system tools — e.g. `web_search`, `execute_code`,
+//      `file_search`, `artifacts`. These are bare identifiers.
+//   2. MCP-backed tools — fully-qualified as `<tool>_mcp_<server>` where
+//      `<server>` is the key from `mcpServers` in librechat.yaml. Anything
+//      that is neither a system tool nor matches the `_mcp_` delimiter is
+//      silently dropped by `loadAgentTools`/`filterAuthorizedTools`. That
+//      was the bug behind "I can't reach admin-ops": the previous map sent
+//      the bare server name (`admin_ops`) which fits neither category.
 //
-// LibreChat 1.2.x exposes the following first-class tool ids:
-//   web_search, execute_code, file_search, artifacts, ocr, actions
-// Of those, three line up directly with current capability ids.
-export const CAPABILITY_TO_TOOL: Readonly<Record<string, string>> = Object.freeze({
-  'web.search': 'web_search',
-  'shell.run': 'execute_code',
-  'code.read': 'file_search',
-  // `sandbox.run` is backed by the dedicated sandbox Fly app exposed to
-  // LibreChat via the `code-sandbox` MCP server (deploy/sandbox/). When the
-  // admin toggles this capability OFF the tool name is removed from the
-  // manager agent's MongoDB `tools` array; LibreChat then stops advertising
-  // the tool to Gemini on the next conversation turn.
-  'sandbox.run': 'code_sandbox',
-  // Newer agentic surfaces — each maps to a single MCP server tool group
-  // that LibreChat surfaces to the agent when the capability is ON.
-  'web.scrape': 'web_scrape',
-  'cli.run': 'opencli',
-  'code.review': 'socraticode',
-  'admin.manage': 'admin_ops',
+// MCP tool inventory below comes straight from the live servers:
+//   code-sandbox: run_code, integrations_status, scrape_url, cli_run,
+//                 github_call
+//   admin-ops:    list_api_keys, set_api_key, delete_api_key, test_api_key,
+//                 list_users, create_user, delete_user, set_user_password,
+//                 grant_role, revoke_role, list_agent_capabilities,
+//                 set_agent_capability
+//   socraticode:  (stdio MCP — left empty until tool-list discovery is
+//                  added; the capability still toggles the server on/off
+//                  via librechat.yaml access checks.)
+const D = '_mcp_';
+export const CAPABILITY_TO_TOOLS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  'web.search': ['web_search'],
+  'shell.run': ['execute_code'],
+  'code.read': ['file_search'],
+  'sandbox.run': [
+    `run_code${D}code-sandbox`,
+    `integrations_status${D}code-sandbox`,
+    `github_call${D}code-sandbox`,
+  ],
+  'web.scrape': [`scrape_url${D}code-sandbox`],
+  'cli.run': [`cli_run${D}code-sandbox`],
+  'code.review': [],
+  'admin.manage': [
+    `list_api_keys${D}admin-ops`,
+    `set_api_key${D}admin-ops`,
+    `delete_api_key${D}admin-ops`,
+    `test_api_key${D}admin-ops`,
+    `list_users${D}admin-ops`,
+    `create_user${D}admin-ops`,
+    `delete_user${D}admin-ops`,
+    `set_user_password${D}admin-ops`,
+    `grant_role${D}admin-ops`,
+    `revoke_role${D}admin-ops`,
+    `list_agent_capabilities${D}admin-ops`,
+    `set_agent_capability${D}admin-ops`,
+  ],
 });
+
+// Back-compat alias — older callers (and unit tests) imported a single-tool
+// map. We expose the first tool from each list so the existing shape keeps
+// working without forcing every caller to migrate.
+export const CAPABILITY_TO_TOOL: Readonly<Record<string, string>> = Object.freeze(
+  Object.fromEntries(
+    Object.entries(CAPABILITY_TO_TOOLS)
+      .map(([cap, tools]) => [cap, tools[0]])
+      .filter(([, t]) => typeof t === 'string'),
+  ) as Record<string, string>,
+);
 
 // Tools the manager agent should always carry regardless of policy. `artifacts`
 // is a UX affordance (markdown/Mermaid/React rendering), not a privileged
@@ -72,8 +106,9 @@ export function computeEffectiveTools(policy: AgentPolicy): string[] {
   const allowed = new Set<string>(ALWAYS_ON_TOOLS);
   for (const [capId, on] of Object.entries(policy.capabilities)) {
     if (!on) continue;
-    const tool = CAPABILITY_TO_TOOL[capId];
-    if (tool) allowed.add(tool);
+    const tools = CAPABILITY_TO_TOOLS[capId];
+    if (!tools) continue;
+    for (const t of tools) allowed.add(t);
   }
   return [...allowed].sort();
 }
