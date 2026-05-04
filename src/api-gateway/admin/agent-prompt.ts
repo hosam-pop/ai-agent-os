@@ -41,7 +41,22 @@ const TOOL_DOCS: ToolEntry[] = [
     toolName: 'web_scrape',
     shortLabel: 'scrape page',
     bullet:
-      '`scrape_url(url, selectors?)` — fetch any page and extract clean text + CSS-selector hits. Set `js: true` to try a Stealth fetcher (falls back gracefully).',
+      '`scrape_url(url, selectors?)` — fetch any page and extract clean text + CSS-selector hits. Set `js: true` to try a Stealth fetcher (falls back gracefully). Powered by Scrapling.',
+  },
+  {
+    capability: 'web.browse',
+    toolName: 'browser_action',
+    shortLabel: 'browser automation',
+    bullet: [
+      '`browser_action(action, …)` — drive a real Chromium browser end-to-end (Playwright). Cookies/localStorage persist between calls within the same session, so chain steps freely.',
+      '  • `navigate(url)` — open a URL.',
+      '  • `type(selector, text, clear?)` — type into an input.',
+      '  • `click(selector)` — click an element.',
+      '  • `press(key, selector?)` — keyboard event (Enter, Tab, …).',
+      '  • `wait_for(selector)` / `extract(selector, attribute?)` / `evaluate(script)`.',
+      '  • `screenshot(full_page?)` — returns base64 PNG you can show the operator.',
+      'Use this for login flows, posting on X/Twitter, scraping JS-rendered pages, filling dashboards, anything a human would do in a browser. Read credentials via `admin-ops.list_api_keys` (or ask the operator) before logging in.',
+    ].join('\n'),
   },
   {
     capability: 'sandbox.run',
@@ -72,6 +87,13 @@ const TOOL_DOCS: ToolEntry[] = [
     shortLabel: 'search files',
     bullet:
       '`file_search` — semantic + lexical search over any files the operator uploads. Cite line numbers when summarizing.',
+  },
+  {
+    capability: 'llm.failover',
+    toolName: 'chat_failover',
+    shortLabel: 'LLM failover',
+    bullet:
+      '`chat_failover(prompt, providers?, system?)` — single-shot chat completion that automatically retries across Gemini → DeepSeek → OpenAI → Anthropic when one runs out of quota or rate-limits. Use this when your primary model is failing mid-task and you need to keep going on a backup key without bothering the operator. Returns the answer plus a per-provider attempt log.',
   },
   {
     capability: 'admin.manage',

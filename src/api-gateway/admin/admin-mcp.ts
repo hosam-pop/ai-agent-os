@@ -229,7 +229,147 @@ export function buildAdminMcpServer(deps: AdminMcpDeps): McpServer {
     },
   );
 
+  // Auto-failover chat completion. Tries the configured providers in order
+  // (default Gemini → DeepSeek → OpenAI → Anthropic) and falls back on quota
+  // / 429 / auth / connectivity errors. The agent uses this when its primary
+  // model runs out of quota mid-task and it needs to keep going on a backup
+  // key without interrupting the conversation.
+  const FAILOVER_PROVIDERS = ['gemini', 'deepseek', 'openai', 'anthropic'] as const;
+  type FailoverProvider = (typeof FAILOVER_PROVIDERS)[number];
+
+  server.tool(
+    'chat_failover',
+    'Send a single prompt to the first available chat provider, automatically falling back through the configured providers when quota/auth fails. Returns the first successful answer plus a per-provider attempt log.',
+    {
+      prompt: z.string().min(1),
+      system: z.string().optional(),
+      providers: z.array(z.enum(FAILOVER_PROVIDERS)).optional(),
+      maxOutputTokens: z.number().int().min(1).max(4096).optional(),
+      temperature: z.number().min(0).max(2).optional(),
+    },
+    async ({ prompt, system, providers, maxOutputTokens, temperature }) => {
+      const order: FailoverProvider[] = providers && providers.length
+        ? [...new Set(providers)]
+        : [...FAILOVER_PROVIDERS];
+
+      const attempts: Array<{ provider: FailoverProvider; ok: boolean; reason?: string }> = [];
+
+      for (const provider of order) {
+        const key = await deps.keys.decrypt(provider);
+        if (!key) {
+          attempts.push({ provider, ok: false, reason: 'no_key' });
+          continue;
+        }
+        try {
+          const text = await callProvider(provider, key, {
+            prompt,
+            system,
+            maxOutputTokens: maxOutputTokens ?? 1024,
+            temperature: temperature ?? 0.7,
+          });
+          attempts.push({ provider, ok: true });
+          return ok({ ok: true, provider, text, attempts });
+        } catch (e) {
+          const reason = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+          attempts.push({ provider, ok: false, reason });
+          // Try the next provider in order on any error.
+          continue;
+        }
+      }
+
+      return ok({ ok: false, error: 'all_providers_failed', attempts });
+    },
+  );
+
   return server;
+}
+
+// Per-provider chat call that throws on any non-2xx so chat_failover can move
+// to the next backend. Each branch hits the provider's smallest, cheapest chat
+// endpoint — we don't try to expose every option, this tool is for resilience
+// not for fine-tuned generation.
+async function callProvider(
+  provider: 'gemini' | 'deepseek' | 'openai' | 'anthropic',
+  key: string,
+  input: { prompt: string; system?: string; maxOutputTokens: number; temperature: number },
+): Promise<string> {
+  const ctrl = new AbortController();
+  const timeoutId = setTimeout(() => ctrl.abort(), 30_000);
+  try {
+    if (provider === 'gemini') {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`;
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
+          ...(input.system ? { systemInstruction: { parts: [{ text: input.system }] } } : {}),
+          generationConfig: {
+            temperature: input.temperature,
+            maxOutputTokens: input.maxOutputTokens,
+          },
+        }),
+        signal: ctrl.signal,
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text().catch(() => '')}`);
+      const data = (await r.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+      const text = data.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? '';
+      if (!text) throw new Error('empty response');
+      return text;
+    }
+
+    if (provider === 'deepseek' || provider === 'openai') {
+      const base = provider === 'deepseek' ? 'https://api.deepseek.com/v1' : 'https://api.openai.com/v1';
+      const model = provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini';
+      const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
+      if (input.system) messages.push({ role: 'system', content: input.system });
+      messages.push({ role: 'user', content: input.prompt });
+      const r = await fetch(`${base}/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: input.temperature,
+          max_tokens: input.maxOutputTokens,
+        }),
+        signal: ctrl.signal,
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text().catch(() => '')}`);
+      const data = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const text = data.choices?.[0]?.message?.content ?? '';
+      if (!text) throw new Error('empty response');
+      return text;
+    }
+
+    if (provider === 'anthropic') {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-haiku-latest',
+          max_tokens: input.maxOutputTokens,
+          temperature: input.temperature,
+          ...(input.system ? { system: input.system } : {}),
+          messages: [{ role: 'user', content: input.prompt }],
+        }),
+        signal: ctrl.signal,
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text().catch(() => '')}`);
+      const data = (await r.json()) as { content?: Array<{ type: string; text?: string }> };
+      const text = (data.content ?? []).filter(c => c.type === 'text').map(c => c.text ?? '').join('');
+      if (!text) throw new Error('empty response');
+      return text;
+    }
+
+    throw new Error(`unsupported provider: ${provider}`);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // Mounts the admin MCP transport at `POST /admin-mcp`. Stateless mode keeps
