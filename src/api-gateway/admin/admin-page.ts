@@ -174,20 +174,20 @@ export function renderAdminKeysPage(opts: RenderAdminKeysPageOptions): string {
         <span class="provider-status" data-status="unset">…</span>
       </header>
       <div class="provider-meta" hidden>
-        <code class="provider-preview"></code>
         <span class="provider-updated"></span>
-        <span class="provider-test" hidden></span>
       </div>
+      <ul class="provider-slots" hidden></ul>
       <form class="provider-form">
         <label class="field">
           <span class="field-label" data-i18n="form.keyLabel">API key</span>
           <input type="password" class="provider-input" autocomplete="off" spellcheck="false" />
         </label>
+        <p class="provider-rotation-hint" data-i18n="form.rotation">Multiple keys are rotated automatically when one runs out of quota.</p>
         <div class="provider-error alert alert-error" hidden></div>
         <div class="provider-actions">
-          <button type="submit" class="primary-btn save-btn"><span data-i18n="form.save">Save</span></button>
-          <button type="button" class="secondary-btn test-btn"><span data-i18n="form.test">Test</span></button>
-          <button type="button" class="danger-btn clear-btn" hidden><span data-i18n="form.clear">Clear</span></button>
+          <button type="submit" class="primary-btn save-btn"><span data-i18n="form.save">Add key</span></button>
+          <button type="button" class="secondary-btn test-btn" hidden><span data-i18n="form.test">Test all</span></button>
+          <button type="button" class="danger-btn clear-btn" hidden><span data-i18n="form.clear">Clear all</span></button>
         </div>
       </form>
     </article>
@@ -506,6 +506,46 @@ input:focus {
 .provider-test[data-ok="false"] { color: rgb(255, 179, 179); }
 .provider-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .provider-actions .primary-btn { flex: 1 1 auto; min-width: 100px; }
+.provider-slots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.provider-slot {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.provider-slot-preview {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+}
+.provider-slot-meta {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.provider-slot-meta[data-ok="true"] { color: rgb(174, 232, 200); }
+.provider-slot-meta[data-ok="false"] { color: rgb(255, 179, 179); }
+.provider-slot-actions { display: flex; gap: 6px; }
+.provider-slot-actions button { padding: 4px 10px; font-size: 12px; }
+.provider-rotation-hint {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
 .provider[data-accent="green"] .save-btn {
   background: linear-gradient(90deg, var(--green-a), var(--green-b));
 }
@@ -671,13 +711,20 @@ const PAGE_JS = String.raw`
       'panel.title': 'Configured integrations',
       'panel.subtitle': 'Keys are encrypted at rest with AES-256-GCM. The agent reads them lazily; nothing is logged in plain text.',
       'form.keyLabel': 'API key',
-      'form.save': 'Save',
-      'form.test': 'Test',
-      'form.clear': 'Clear',
+      'form.save': 'Add key',
+      'form.test': 'Test all',
+      'form.clear': 'Clear all',
+      'form.rotation': 'Multiple keys are rotated automatically when one runs out of quota.',
+      'slot.delete': 'Remove',
+      'slot.test': 'Test',
+      'slot.added': 'added',
+      'slot.testOk': 'OK',
+      'slot.testFail': 'failed',
       'status.set': 'Configured',
       'status.unset': 'Not set',
       'status.error': 'Test failed',
       'meta.updated': 'Updated',
+      'meta.count': 'keys'
       'meta.never': 'Never tested',
       'connect.github': 'Connect GitHub',
       'users.title': 'Users',
@@ -740,13 +787,20 @@ const PAGE_JS = String.raw`
       'panel.title': 'التكاملات المفعّلة',
       'panel.subtitle': 'المفاتيح مشفّرة تلقائياً (AES-256-GCM). الوكيل يقرأها عند الحاجة فقط، ولا تظهر في السجلات أبداً.',
       'form.keyLabel': 'مفتاح API',
-      'form.save': 'حفظ',
-      'form.test': 'اختبار',
-      'form.clear': 'حذف',
+      'form.save': 'إضافة مفتاح',
+      'form.test': 'اختبار الكل',
+      'form.clear': 'حذف الكل',
+      'form.rotation': 'لما تضيف أكتر من مفتاح، يتم التدوير بينهم تلقائياً لما واحد يخلص.',
+      'slot.delete': 'إزالة',
+      'slot.test': 'اختبار',
+      'slot.added': 'تمت الإضافة',
+      'slot.testOk': 'سليم',
+      'slot.testFail': 'فشل',
       'status.set': 'مفعّل',
       'status.unset': 'غير مضبوط',
       'status.error': 'الاختبار فشل',
       'meta.updated': 'آخر تحديث',
+      'meta.count': 'مفاتيح'
       'meta.never': 'لم يُختبر بعد',
       'connect.github': 'ربط GitHub',
       'users.title': 'المستخدمون',
@@ -909,34 +963,91 @@ const PAGE_JS = String.raw`
     return node;
   }
 
-  function applyStatus(card, statusObj) {
+  function applyStatus(card, statusObj, providerId) {
     const badge = card.querySelector('.provider-status');
     const meta = card.querySelector('.provider-meta');
-    const preview = card.querySelector('.provider-preview');
     const updated = card.querySelector('.provider-updated');
-    const test = card.querySelector('.provider-test');
+    const slotsList = card.querySelector('.provider-slots');
     const clearBtn = card.querySelector('.clear-btn');
-    if (statusObj.configured) {
-      let kind = 'set';
-      if (statusObj.lastTestOk === false) kind = 'error';
+    const testBtn = card.querySelector('.test-btn');
+    const slots = (statusObj && statusObj.slots) || [];
+    const count = (statusObj && statusObj.count) || 0;
+    if (statusObj && statusObj.configured && count > 0) {
+      const anyFailed = slots.some(function (s) { return s.lastTestOk === false; });
+      const kind = anyFailed ? 'error' : 'set';
       badge.dataset.status = kind;
-      badge.textContent = renderStatusLabel(kind);
+      badge.textContent = renderStatusLabel(kind) + ' (' + count + ' ' + t('meta.count') + ')';
       meta.hidden = false;
-      preview.textContent = statusObj.preview || '••••';
       updated.textContent = statusObj.updatedAt ? (t('meta.updated') + ': ' + formatDate(statusObj.updatedAt)) : '';
-      if (statusObj.lastTestAt) {
-        test.hidden = false;
-        test.dataset.ok = statusObj.lastTestOk ? 'true' : 'false';
-        test.textContent = statusObj.lastTestNote ? (statusObj.lastTestNote + ' · ' + formatDate(statusObj.lastTestAt)) : formatDate(statusObj.lastTestAt);
-      } else {
-        test.hidden = true;
-      }
+      slotsList.hidden = false;
+      slotsList.innerHTML = '';
+      slots.forEach(function (slot) {
+        const li = document.createElement('li');
+        li.className = 'provider-slot';
+        li.dataset.index = String(slot.index);
+
+        const previewEl = document.createElement('code');
+        previewEl.className = 'provider-slot-preview';
+        previewEl.textContent = slot.preview;
+        li.appendChild(previewEl);
+
+        const slotMeta = document.createElement('span');
+        slotMeta.className = 'provider-slot-meta';
+        const parts = [];
+        if (slot.lastTestAt) {
+          const okLabel = slot.lastTestOk ? t('slot.testOk') : t('slot.testFail');
+          const note = slot.lastTestNote ? ' · ' + slot.lastTestNote : '';
+          parts.push(okLabel + note + ' · ' + formatDate(slot.lastTestAt));
+        } else if (slot.addedAt) {
+          parts.push(t('slot.added') + ': ' + formatDate(slot.addedAt));
+        }
+        slotMeta.textContent = parts.join(' — ');
+        slotMeta.dataset.ok = slot.lastTestOk === false ? 'false' : (slot.lastTestOk === true ? 'true' : '');
+        li.appendChild(slotMeta);
+
+        const actions = document.createElement('div');
+        actions.className = 'provider-slot-actions';
+        const tBtn = document.createElement('button');
+        tBtn.type = 'button';
+        tBtn.className = 'secondary-btn slot-test-btn';
+        tBtn.textContent = t('slot.test');
+        tBtn.addEventListener('click', async function () {
+          tBtn.disabled = true;
+          try {
+            const r = await api('/admin/keys/api/' + encodeURIComponent(providerId) + '/test/' + slot.index, { method: 'POST' });
+            if (r.ok) applyStatus(card, r.body.status, providerId);
+          } finally {
+            tBtn.disabled = false;
+          }
+        });
+        const dBtn = document.createElement('button');
+        dBtn.type = 'button';
+        dBtn.className = 'danger-btn slot-delete-btn';
+        dBtn.textContent = t('slot.delete');
+        dBtn.addEventListener('click', async function () {
+          dBtn.disabled = true;
+          try {
+            const r = await api('/admin/keys/api/' + encodeURIComponent(providerId) + '/' + slot.index, { method: 'DELETE' });
+            if (r.ok) applyStatus(card, r.body.status, providerId);
+          } finally {
+            dBtn.disabled = false;
+          }
+        });
+        actions.appendChild(tBtn);
+        actions.appendChild(dBtn);
+        li.appendChild(actions);
+        slotsList.appendChild(li);
+      });
       clearBtn.hidden = false;
+      testBtn.hidden = false;
     } else {
       badge.dataset.status = 'unset';
       badge.textContent = renderStatusLabel('unset');
       meta.hidden = true;
+      slotsList.hidden = true;
+      slotsList.innerHTML = '';
       clearBtn.hidden = true;
+      testBtn.hidden = true;
     }
   }
 
@@ -955,7 +1066,7 @@ const PAGE_JS = String.raw`
     const providers = r.body.providers || [];
     providers.forEach(function (p) {
       const card = buildProviderCard(p);
-      applyStatus(card, p.status);
+      applyStatus(card, p.status, p.id);
       attachCardHandlers(card, p);
       list.appendChild(card);
     });
@@ -985,19 +1096,20 @@ const PAGE_JS = String.raw`
         return;
       }
       input.value = '';
-      applyStatus(card, r.body.status);
+      applyStatus(card, r.body.status, p.id);
     });
 
     testBtn.addEventListener('click', async function () {
       hideAlert(errEl);
       testBtn.disabled = true;
       try {
+        // Test slot 0 — the per-slot Test buttons in the slot list cover the rest.
         const r = await api('/admin/keys/api/' + encodeURIComponent(p.id) + '/test', { method: 'POST' });
         if (!r.ok) {
           showAlert(errEl, (r.body && r.body.message) || t('login.error.generic'), 'error');
           return;
         }
-        applyStatus(card, r.body.status);
+        applyStatus(card, r.body.status, p.id);
       } finally {
         testBtn.disabled = false;
       }
@@ -1010,7 +1122,7 @@ const PAGE_JS = String.raw`
         showAlert(errEl, (r.body && r.body.message) || t('login.error.generic'), 'error');
         return;
       }
-      applyStatus(card, r.body.status);
+      applyStatus(card, r.body.status, p.id);
     });
   }
 

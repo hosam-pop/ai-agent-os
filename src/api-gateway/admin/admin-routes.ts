@@ -172,6 +172,9 @@ export async function registerAdminKeysRoutes(
     reply.send({ providers: items });
   });
 
+  // POST /admin/keys/api/:provider — APPENDS a new key slot by default. Pass
+  // ?replaceAll=true to wipe every existing slot first. Pass `index` in the
+  // body to replace a specific slot in place.
   app.post('/admin/keys/api/:provider', async (req: FastifyRequest, reply) => {
     const id = (req.params as { provider?: string }).provider ?? '';
     const provider = findProvider(id);
@@ -188,10 +191,28 @@ export async function registerAdminKeysRoutes(
       return reply.code(400).send({ error: 'invalid_value', message: validationError });
     }
     const session = (req as FastifyRequest & { adminSession?: AdminSession }).adminSession;
-    const rec = await store.set(provider.id, value, session?.username ?? 'admin');
+    const actor = session?.username ?? 'admin';
+    const label = typeof body.label === 'string' ? body.label.slice(0, 64) : undefined;
+    const replaceAll = String((req.query as { replaceAll?: string }).replaceAll ?? '') === 'true'
+      || body.replaceAll === true;
+    const indexNum = typeof body.index === 'number' ? body.index : undefined;
+
+    let rec;
+    if (replaceAll) {
+      rec = await store.set(provider.id, value, actor);
+    } else if (typeof indexNum === 'number') {
+      try {
+        rec = await store.replace(provider.id, indexNum, value, actor, label);
+      } catch (e) {
+        return reply.code(400).send({ error: 'invalid_index', message: (e as Error).message });
+      }
+    } else {
+      rec = await store.add(provider.id, value, actor, label);
+    }
     reply.send({ ok: true, status: toPublicStatus(rec, provider.id, masterKey) });
   });
 
+  // DELETE /admin/keys/api/:provider — wipes every slot for the provider.
   app.delete('/admin/keys/api/:provider', async (req, reply) => {
     const id = (req.params as { provider?: string }).provider ?? '';
     const provider = findProvider(id);
@@ -202,18 +223,39 @@ export async function registerAdminKeysRoutes(
     reply.send({ ok: true, status: toPublicStatus(null, provider.id, masterKey) });
   });
 
-  app.post('/admin/keys/api/:provider/test', async (req, reply) => {
-    const id = (req.params as { provider?: string }).provider ?? '';
-    const provider = findProvider(id);
+  // DELETE /admin/keys/api/:provider/:index — drops a single slot from the
+  // rotation. The remaining slots keep their order.
+  app.delete('/admin/keys/api/:provider/:index', async (req, reply) => {
+    const params = req.params as { provider?: string; index?: string };
+    const provider = findProvider(params.provider ?? '');
     if (!provider) {
-      return reply.code(404).send({ error: 'not_found', message: `unknown provider: ${id}` });
+      return reply.code(404).send({ error: 'not_found', message: `unknown provider: ${params.provider}` });
     }
-    const value = await store.decrypt(provider.id);
+    const index = Number(params.index);
+    if (!Number.isInteger(index) || index < 0) {
+      return reply.code(400).send({ error: 'invalid_index', message: 'index must be a non-negative integer' });
+    }
+    const removed = await store.delete(provider.id, index);
+    const rec = await store.get(provider.id);
+    reply.send({ ok: removed, status: toPublicStatus(rec, provider.id, masterKey) });
+  });
+
+  // POST /admin/keys/api/:provider/test — tests slot 0 by default. Pass an
+  // optional `:index` segment to test a specific slot.
+  const testSlot = async (
+    provider: ReturnType<typeof findProvider>,
+    index: number,
+    reply: FastifyReply,
+  ) => {
+    if (!provider) {
+      return reply.code(404).send({ error: 'not_found', message: 'unknown provider' });
+    }
+    const value = await store.decryptAt(provider.id, index);
     if (!value) {
-      return reply.code(400).send({ error: 'no_key', message: 'no key stored for this provider' });
+      return reply.code(400).send({ error: 'no_key', message: `no key stored at slot ${index}` });
     }
     if (!provider.testKey) {
-      const status = await store.recordTest(provider.id, { ok: true, note: 'no live test available' });
+      const status = await store.recordTest(provider.id, { ok: true, note: 'no live test available' }, index);
       return reply.send({ ok: true, status: toPublicStatus(status, provider.id, masterKey) });
     }
     let result: { ok: boolean; note: string };
@@ -222,8 +264,22 @@ export async function registerAdminKeysRoutes(
     } catch (err) {
       result = { ok: false, note: (err as Error).message.slice(0, 200) };
     }
-    const rec = await store.recordTest(provider.id, result);
+    const rec = await store.recordTest(provider.id, result, index);
     reply.send({ ok: result.ok, status: toPublicStatus(rec, provider.id, masterKey) });
+  };
+
+  app.post('/admin/keys/api/:provider/test', async (req, reply) => {
+    const id = (req.params as { provider?: string }).provider ?? '';
+    return testSlot(findProvider(id), 0, reply);
+  });
+
+  app.post('/admin/keys/api/:provider/test/:index', async (req, reply) => {
+    const params = req.params as { provider?: string; index?: string };
+    const index = Number(params.index);
+    if (!Number.isInteger(index) || index < 0) {
+      return reply.code(400).send({ error: 'invalid_index', message: 'index must be a non-negative integer' });
+    }
+    return testSlot(findProvider(params.provider ?? ''), index, reply);
   });
 
   // ------- Account (current admin) -------

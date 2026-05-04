@@ -76,18 +76,51 @@ test('file keys store persists, decrypts and clears records', async () => {
 
     const rec = await store.set('gemini', 'AIzaTestValue1234567890abcd', 'admin');
     assert.equal(rec.provider, 'gemini');
-    assert.notEqual(rec.ciphertext, '');
+    assert.equal(rec.slots.length, 1);
+    assert.notEqual(rec.slots[0].ciphertext, '');
 
     const status = toPublicStatus(rec, 'gemini', MASTER);
     assert.equal(status.configured, true);
+    assert.equal(status.count, 1);
     assert.equal(status.preview, 'AIza…abcd');
+    assert.equal(status.slots[0].preview, 'AIza…abcd');
 
-    // Re-open the store and ensure the record persisted.
+    // Append a second slot and verify rotation order.
+    const rec2 = await store.add('gemini', 'AIzaSecondKey9876543210xyzw', 'admin');
+    assert.equal(rec2.slots.length, 2);
+    const all = await store.decryptAll('gemini');
+    assert.equal(all.length, 2);
+    assert.equal(all[0].key, 'AIzaTestValue1234567890abcd');
+    assert.equal(all[1].key, 'AIzaSecondKey9876543210xyzw');
+
+    // decryptNext should round-robin through the slots.
+    const first = await store.decryptNext('gemini');
+    const second = await store.decryptNext('gemini');
+    const third = await store.decryptNext('gemini');
+    assert.ok(first && second && third);
+    assert.equal(first.index, 0);
+    assert.equal(second.index, 1);
+    assert.equal(third.index, 0);
+
+    // Replace slot 1 in place.
+    await store.replace('gemini', 1, 'AIzaReplacedKey1111111111aa', 'admin');
+    const replaced = await store.decryptAt('gemini', 1);
+    assert.equal(replaced, 'AIzaReplacedKey1111111111aa');
+
+    // Re-open the store and ensure the records persisted.
     const store2 = createFileKeysStore({ filePath, masterKey: MASTER });
     const recAgain = await store2.get('gemini');
     assert.ok(recAgain);
+    assert.equal(recAgain.slots.length, 2);
     const decrypted = await store2.decrypt('gemini');
     assert.equal(decrypted, 'AIzaTestValue1234567890abcd');
+
+    // Drop a single slot.
+    const droppedOne = await store2.delete('gemini', 0);
+    assert.equal(droppedOne, true);
+    const recAfterDrop = await store2.get('gemini');
+    assert.ok(recAfterDrop);
+    assert.equal(recAfterDrop.slots.length, 1);
 
     const cleared = await store2.delete('gemini');
     assert.equal(cleared, true);
