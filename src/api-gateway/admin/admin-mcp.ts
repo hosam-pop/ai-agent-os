@@ -165,19 +165,26 @@ export function buildAdminMcpServer(deps: AdminMcpDeps): McpServer {
 
   server.tool(
     'create_user',
-    'Create a new Keycloak user. Default roles: agent-user. Pass `grantAdmin: true` to also assign the agent-admin role.',
+    [
+      'Create a new account in the AI Agent OS realm. Pick the access level explicitly:',
+      '  • `access: "admin"` — full admin (LibreChat + Keycloak + this admin console). Roles: agent-user + agent-admin.',
+      '  • `access: "chat"` (default) — chat-only user. Can sign in to LibreChat but NOT this admin console. Role: agent-user.',
+      'Both levels go through the same Keycloak realm so SSO works in both LibreChat and the admin console — the difference is only which roles are granted. Always confirm with the operator which access they want before creating, especially if they were vague.',
+    ].join('\n'),
     {
       username: z.string().min(3).max(64),
       password: z.string().min(8),
       email: z.string().email().optional(),
       firstName: z.string().optional(),
       lastName: z.string().optional(),
-      grantAdmin: z.boolean().optional(),
+      access: z.enum(['admin', 'chat']).optional().describe('admin: full admin console + chat. chat (default): LibreChat only.'),
+      grantAdmin: z.boolean().optional().describe('Legacy alias for `access: "admin"`. Prefer `access`.'),
       temporaryPassword: z.boolean().optional(),
     },
-    async ({ username, password, email, firstName, lastName, grantAdmin, temporaryPassword }) => {
+    async ({ username, password, email, firstName, lastName, access, grantAdmin, temporaryPassword }) => {
+      const isAdmin = access === 'admin' || (access === undefined && grantAdmin === true);
       const realmRoles = ['agent-user'];
-      if (grantAdmin) realmRoles.push('agent-admin');
+      if (isAdmin) realmRoles.push('agent-admin');
       const user = await deps.keycloak.createUser({
         username,
         password,
@@ -188,7 +195,15 @@ export function buildAdminMcpServer(deps: AdminMcpDeps): McpServer {
         realmRoles,
         enabled: true,
       });
-      return ok({ ok: true, user, roles: realmRoles });
+      return ok({
+        ok: true,
+        user,
+        access: isAdmin ? 'admin' : 'chat',
+        roles: realmRoles,
+        canSignInTo: isAdmin
+          ? ['LibreChat', 'admin-console']
+          : ['LibreChat'],
+      });
     },
   );
 

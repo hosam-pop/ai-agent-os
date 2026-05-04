@@ -724,7 +724,7 @@ const PAGE_JS = String.raw`
       'status.unset': 'Not set',
       'status.error': 'Test failed',
       'meta.updated': 'Updated',
-      'meta.count': 'keys'
+      'meta.count': 'keys',
       'meta.never': 'Never tested',
       'connect.github': 'Connect GitHub',
       'users.title': 'Users',
@@ -800,7 +800,7 @@ const PAGE_JS = String.raw`
       'status.unset': 'غير مضبوط',
       'status.error': 'الاختبار فشل',
       'meta.updated': 'آخر تحديث',
-      'meta.count': 'مفاتيح'
+      'meta.count': 'مفاتيح',
       'meta.never': 'لم يُختبر بعد',
       'connect.github': 'ربط GitHub',
       'users.title': 'المستخدمون',
