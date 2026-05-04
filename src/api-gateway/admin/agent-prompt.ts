@@ -92,8 +92,10 @@ const TOOL_DOCS: ToolEntry[] = [
     capability: 'llm.failover',
     toolName: 'chat_failover',
     shortLabel: 'LLM failover',
-    bullet:
-      '`chat_failover(prompt, providers?, system?)` — single-shot chat completion that automatically retries across Gemini → DeepSeek → OpenAI → Anthropic when one runs out of quota or rate-limits. Use this when your primary model is failing mid-task and you need to keep going on a backup key without bothering the operator. Returns the answer plus a per-provider attempt log.',
+    bullet: [
+      '`chat_failover(prompt, providers?, system?)` — single-shot chat completion that walks every stored key for the first provider before falling back through Gemini → DeepSeek → OpenAI → Anthropic. Use this when your primary model fails mid-task and you need to keep going on a backup key without bothering the operator. Returns the answer plus a per-provider/per-key attempt log.',
+      '`chat_pipeline(prompt, thinker?, executor?)` — two-stage chat: a thinker provider plans, then an executor provider produces the final answer using that plan. Each stage independently rotates through every stored key for its provider, then falls back to the others. Use this when the operator wants one model to reason and another to write (e.g. DeepSeek thinks, Gemini writes).',
+    ].join('\n'),
   },
   {
     capability: 'admin.manage',

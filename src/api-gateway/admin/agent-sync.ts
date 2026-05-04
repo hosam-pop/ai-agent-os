@@ -43,7 +43,7 @@ export const CAPABILITY_TO_TOOLS: Readonly<Record<string, readonly string[]>> = 
   'web.browse': [`browser_action${D}code-sandbox`],
   'cli.run': [`cli_run${D}code-sandbox`],
   'code.review': [],
-  'llm.failover': [`chat_failover${D}admin-ops`],
+  'llm.failover': [`chat_failover${D}admin-ops`, `chat_pipeline${D}admin-ops`],
   'admin.manage': [
     `list_api_keys${D}admin-ops`,
     `set_api_key${D}admin-ops`,
