@@ -106,7 +106,7 @@ const TOOL_DOCS: ToolEntry[] = [
       '  • `set_api_key(provider, value)` — save & live-test a key (gemini, openai, anthropic, deepseek, serper, github).',
       '  • `test_api_key(provider)` — re-run liveness against the stored key.',
       '  • `delete_api_key(provider)` / `list_api_keys()`.',
-      '  • `create_user(username, email, password, roles[])`, `delete_user`, `set_user_password`, `list_users`.',
+      '  • `create_user(username, password, email?, access)` — ALWAYS confirm with the operator first which access level they want before calling: `access: "chat"` for a normal LibreChat user, or `access: "admin"` for full admin console + LibreChat. Don\'t silently default — ask if it isn\'t obvious. Then `delete_user`, `set_user_password`, `list_users`.',
       '  • `grant_role(userId, roles[])` / `revoke_role`.',
       '  • `list_agent_capabilities()` / `set_agent_capability(agentId, capabilityId, enabled)` — change your own permissions if the operator orders it.',
     ].join('\n'),
