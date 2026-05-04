@@ -70,49 +70,86 @@ export function buildAdminMcpServer(deps: AdminMcpDeps): McpServer {
 
   server.tool(
     'set_api_key',
-    'Save (or replace) the API key for a provider. The key is stored encrypted at rest. Pass the raw secret as `value`.',
+    'Save an API key for a provider. By default APPENDS a new key slot so you can stack multiple keys for the same provider (chat_failover round-robins through them). Pass `index` to replace an existing slot, or `replaceAll: true` to wipe all existing slots and start fresh.',
     {
       provider: z.enum(PROVIDER_IDS),
       value: z.string().min(8),
+      index: z.number().int().min(0).optional(),
+      replaceAll: z.boolean().optional(),
+      label: z.string().max(64).optional(),
     },
-    async ({ provider, value }) => {
+    async ({ provider, value, index, replaceAll, label }) => {
       const desc = findProvider(provider);
       if (!desc) return err(`unknown provider: ${provider}`);
       const validation = desc.validate(value);
       if (validation) return err(`invalid key for ${provider}: ${validation}`);
-      const rec = await deps.keys.set(provider, value, actor);
+      let rec;
+      if (replaceAll) {
+        rec = await deps.keys.set(provider, value, actor);
+      } else if (typeof index === 'number') {
+        try {
+          rec = await deps.keys.replace(provider, index, value, actor, label);
+        } catch (e) {
+          return err((e as Error).message);
+        }
+      } else {
+        rec = await deps.keys.add(provider, value, actor, label);
+      }
+      const status = toPublicStatus(rec, provider, deps.masterKey);
       return ok({
         ok: true,
         provider,
-        updatedAt: rec.updatedAt,
-        preview: toPublicStatus(rec, provider, deps.masterKey).preview,
+        slotCount: status.count,
+        slots: status.slots,
       });
     },
   );
 
   server.tool(
     'delete_api_key',
-    'Remove the stored API key for a provider.',
-    { provider: z.enum(PROVIDER_IDS) },
-    async ({ provider }) => {
-      const removed = await deps.keys.delete(provider);
-      return ok({ ok: removed, provider });
+    'Remove a stored API key. Pass `index` to drop a single slot from the rotation; omit it to wipe every slot for the provider.',
+    {
+      provider: z.enum(PROVIDER_IDS),
+      index: z.number().int().min(0).optional(),
+    },
+    async ({ provider, index }) => {
+      const removed = await deps.keys.delete(provider, index);
+      const rec = await deps.keys.get(provider);
+      const status = toPublicStatus(rec, provider, deps.masterKey);
+      return ok({ ok: removed, provider, slotCount: status.count, slots: status.slots });
     },
   );
 
   server.tool(
     'test_api_key',
-    'Run a live liveness check against the provider using the currently stored key. Returns `{ok, note}`.',
-    { provider: z.enum(PROVIDER_IDS) },
-    async ({ provider }) => {
+    'Run a live liveness check against a stored key. Pass `index` to test a single slot; omit it to test every slot for the provider in order. Returns one record per slot.',
+    {
+      provider: z.enum(PROVIDER_IDS),
+      index: z.number().int().min(0).optional(),
+    },
+    async ({ provider, index }) => {
       const desc = findProvider(provider);
       if (!desc) return err(`unknown provider: ${provider}`);
       if (!desc.testKey) return err(`provider ${provider} does not support live testing`);
-      const plain = await deps.keys.decrypt(provider);
-      if (!plain) return err(`no key configured for ${provider}`);
-      const result = await desc.testKey(plain);
-      await deps.keys.recordTest(provider, result);
-      return ok({ provider, ...result });
+      const all = await deps.keys.decryptAll(provider);
+      if (all.length === 0) return err(`no key configured for ${provider}`);
+      const target = typeof index === 'number'
+        ? all.filter((s) => s.index === index)
+        : all;
+      if (target.length === 0) return err(`slot ${index} does not exist for ${provider}`);
+      const results: Array<{ index: number; ok: boolean; note: string }> = [];
+      for (const slot of target) {
+        try {
+          const r = await desc.testKey(slot.key);
+          await deps.keys.recordTest(provider, r, slot.index);
+          results.push({ index: slot.index, ok: r.ok, note: r.note });
+        } catch (e) {
+          const note = (e as Error).message.slice(0, 200);
+          await deps.keys.recordTest(provider, { ok: false, note }, slot.index);
+          results.push({ index: slot.index, ok: false, note });
+        }
+      }
+      return ok({ provider, results });
     },
   );
 
@@ -252,32 +289,143 @@ export function buildAdminMcpServer(deps: AdminMcpDeps): McpServer {
         ? [...new Set(providers)]
         : [...FAILOVER_PROVIDERS];
 
-      const attempts: Array<{ provider: FailoverProvider; ok: boolean; reason?: string }> = [];
+      const attempts: Array<{ provider: FailoverProvider; keyIndex: number; ok: boolean; reason?: string }> = [];
 
       for (const provider of order) {
-        const key = await deps.keys.decrypt(provider);
-        if (!key) {
-          attempts.push({ provider, ok: false, reason: 'no_key' });
+        const slots = await deps.keys.decryptAll(provider);
+        if (slots.length === 0) {
+          attempts.push({ provider, keyIndex: -1, ok: false, reason: 'no_key' });
           continue;
         }
-        try {
-          const text = await callProvider(provider, key, {
-            prompt,
-            system,
-            maxOutputTokens: maxOutputTokens ?? 1024,
-            temperature: temperature ?? 0.7,
-          });
-          attempts.push({ provider, ok: true });
-          return ok({ ok: true, provider, text, attempts });
-        } catch (e) {
-          const reason = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-          attempts.push({ provider, ok: false, reason });
-          // Try the next provider in order on any error.
-          continue;
+        // Walk every key for this provider before falling through to the next.
+        // Quota / 402 / 429 typically affect a single key, not the account, so
+        // a stack of five DeepSeek keys can absorb a lot of failures before we
+        // actually need to switch providers.
+        let providerSucceeded = false;
+        for (const slot of slots) {
+          try {
+            const text = await callProvider(provider, slot.key, {
+              prompt,
+              system,
+              maxOutputTokens: maxOutputTokens ?? 1024,
+              temperature: temperature ?? 0.7,
+            });
+            attempts.push({ provider, keyIndex: slot.index, ok: true });
+            return ok({ ok: true, provider, keyIndex: slot.index, text, attempts });
+          } catch (e) {
+            const reason = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+            attempts.push({ provider, keyIndex: slot.index, ok: false, reason });
+            continue;
+          }
         }
+        if (providerSucceeded) break;
       }
 
       return ok({ ok: false, error: 'all_providers_failed', attempts });
+    },
+  );
+
+  // Two-stage chat: a `thinker` provider drafts a plan, then an `executor`
+  // provider produces the final answer using that plan as extra context.
+  // Each stage runs through the same multi-key + provider failover loop as
+  // chat_failover so it keeps going as long as ANY key for any backup
+  // provider is still alive.
+  server.tool(
+    'chat_pipeline',
+    'Chain two LLMs: a thinker plans/decomposes the task, and an executor produces the final answer using that plan. Each stage rotates through every stored key for its primary provider, then falls back to the configured providers list. Use this for tasks where you want one model to reason and another to write — e.g. DeepSeek thinks, Gemini writes.',
+    {
+      prompt: z.string().min(1),
+      thinker: z.enum(FAILOVER_PROVIDERS).optional(),
+      executor: z.enum(FAILOVER_PROVIDERS).optional(),
+      thinkerSystem: z.string().optional(),
+      executorSystem: z.string().optional(),
+      providers: z.array(z.enum(FAILOVER_PROVIDERS)).optional(),
+      maxOutputTokens: z.number().int().min(1).max(4096).optional(),
+      temperature: z.number().min(0).max(2).optional(),
+    },
+    async (args) => {
+      const fallback = args.providers && args.providers.length
+        ? [...new Set(args.providers)]
+        : [...FAILOVER_PROVIDERS];
+
+      // Build the per-stage provider order: primary choice first, then the
+      // remaining failover providers in their default order. De-duped.
+      const orderFor = (primary?: FailoverProvider): FailoverProvider[] => {
+        const seen = new Set<FailoverProvider>();
+        const out: FailoverProvider[] = [];
+        if (primary) {
+          out.push(primary);
+          seen.add(primary);
+        }
+        for (const p of fallback) {
+          if (!seen.has(p)) {
+            out.push(p);
+            seen.add(p);
+          }
+        }
+        return out;
+      };
+
+      type Attempt = { stage: 'thinker' | 'executor'; provider: FailoverProvider; keyIndex: number; ok: boolean; reason?: string };
+      const attempts: Attempt[] = [];
+
+      const runStage = async (
+        stage: 'thinker' | 'executor',
+        primary: FailoverProvider | undefined,
+        system: string,
+        userPrompt: string,
+      ): Promise<{ provider: FailoverProvider; keyIndex: number; text: string } | null> => {
+        for (const provider of orderFor(primary)) {
+          const slots = await deps.keys.decryptAll(provider);
+          if (slots.length === 0) {
+            attempts.push({ stage, provider, keyIndex: -1, ok: false, reason: 'no_key' });
+            continue;
+          }
+          for (const slot of slots) {
+            try {
+              const text = await callProvider(provider, slot.key, {
+                prompt: userPrompt,
+                system,
+                maxOutputTokens: args.maxOutputTokens ?? 1024,
+                temperature: args.temperature ?? 0.7,
+              });
+              attempts.push({ stage, provider, keyIndex: slot.index, ok: true });
+              return { provider, keyIndex: slot.index, text };
+            } catch (e) {
+              const reason = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+              attempts.push({ stage, provider, keyIndex: slot.index, ok: false, reason });
+            }
+          }
+        }
+        return null;
+      };
+
+      const thinkerSystem = args.thinkerSystem
+        ?? 'You are a senior planner. Read the user task carefully and produce a tight, numbered plan an executor LLM can follow. Keep it under 12 steps. Do NOT solve the task yet — just plan.';
+      const thinkerOut = await runStage('thinker', args.thinker, thinkerSystem, args.prompt);
+      if (!thinkerOut) {
+        return ok({ ok: false, error: 'thinker_failed', attempts });
+      }
+
+      const executorSystem = args.executorSystem
+        ?? 'You are an executor. Follow the provided plan and produce the final answer to the user task. Be concise and direct.';
+      const executorPrompt = `Task:\n${args.prompt}\n\nPlan:\n${thinkerOut.text}\n\nFinal answer:`;
+      const executorOut = await runStage('executor', args.executor, executorSystem, executorPrompt);
+      if (!executorOut) {
+        return ok({
+          ok: false,
+          error: 'executor_failed',
+          thinker: thinkerOut,
+          attempts,
+        });
+      }
+
+      return ok({
+        ok: true,
+        thinker: thinkerOut,
+        executor: executorOut,
+        attempts,
+      });
     },
   );
 
