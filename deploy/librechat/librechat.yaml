@@ -219,11 +219,12 @@ mcpServers:
   # SocratiCode — Socratic code review / repo reasoning. Runs as a stdio
   # subprocess (npm package). The `code.review` capability gates its tool ids.
   socraticode:
-    command: npx
-    args:
-      - '-y'
-      - 'socraticode'
+    # Pre-installed globally in Dockerfile.librechat; calling the binary
+    # directly avoids the slow `npx -y` lookup that was tripping the
+    # 30s MCP init timeout on first boot.
+    command: socraticode
     timeout: 120000
+    initTimeout: 60000
     env:
       OPENAI_API_KEY: '${OPENAI_API_KEY}'
       ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
