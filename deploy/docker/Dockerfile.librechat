@@ -11,6 +11,14 @@
 # =============================================================================
 FROM ghcr.io/danny-avila/librechat:latest
 
+# Pre-install npm-based MCP servers so `npx -y <pkg>` at runtime is instant.
+# Without this, LibreChat's 30s MCP init window can expire while npm pulls
+# `socraticode` on first launch, putting the server in a "circuit breaker
+# open" state. We install once at build time so the binary is on disk.
+USER root
+RUN npm install -g socraticode@1.8.2 \
+  && npm cache clean --force
+
 # Bundle the declarative config so LibreChat's `ensureBaseConfig` picks it up
 # at boot. `/app/librechat.yaml` is the path LibreChat checks by default.
 COPY deploy/librechat/librechat.yaml /app/librechat.yaml

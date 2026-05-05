@@ -21,14 +21,17 @@ import { buildSystemPrompt } from './agent-prompt.js';
 //
 // MCP tool inventory below comes straight from the live servers:
 //   code-sandbox: run_code, integrations_status, scrape_url, cli_run,
-//                 github_call
+//                 github_call, browser_action
 //   admin-ops:    list_api_keys, set_api_key, delete_api_key, test_api_key,
 //                 list_users, create_user, delete_user, set_user_password,
 //                 grant_role, revoke_role, list_agent_capabilities,
-//                 set_agent_capability
-//   socraticode:  (stdio MCP — left empty until tool-list discovery is
-//                  added; the capability still toggles the server on/off
-//                  via librechat.yaml access checks.)
+//                 set_agent_capability, chat_failover, chat_pipeline
+//   socraticode:  npm package `socraticode` — exposes 25 codebase
+//                 indexing/search/graph tools over stdio. Requires Docker +
+//                 Qdrant + Ollama at runtime; without them the read-only
+//                 introspection tools (codebase_about / codebase_health /
+//                 codebase_list_projects) still respond and the rest fail
+//                 gracefully with a "Docker not available" message.
 const D = '_mcp_';
 export const CAPABILITY_TO_TOOLS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   'web.search': ['web_search'],
@@ -42,7 +45,33 @@ export const CAPABILITY_TO_TOOLS: Readonly<Record<string, readonly string[]>> = 
   'web.scrape': [`scrape_url${D}code-sandbox`],
   'web.browse': [`browser_action${D}code-sandbox`],
   'cli.run': [`cli_run${D}code-sandbox`],
-  'code.review': [],
+  'code.review': [
+    `codebase_index${D}socraticode`,
+    `codebase_update${D}socraticode`,
+    `codebase_remove${D}socraticode`,
+    `codebase_stop${D}socraticode`,
+    `codebase_watch${D}socraticode`,
+    `codebase_search${D}socraticode`,
+    `codebase_status${D}socraticode`,
+    `codebase_graph_build${D}socraticode`,
+    `codebase_graph_query${D}socraticode`,
+    `codebase_graph_stats${D}socraticode`,
+    `codebase_graph_circular${D}socraticode`,
+    `codebase_graph_visualize${D}socraticode`,
+    `codebase_graph_remove${D}socraticode`,
+    `codebase_graph_status${D}socraticode`,
+    `codebase_impact${D}socraticode`,
+    `codebase_flow${D}socraticode`,
+    `codebase_symbol${D}socraticode`,
+    `codebase_symbols${D}socraticode`,
+    `codebase_context${D}socraticode`,
+    `codebase_context_search${D}socraticode`,
+    `codebase_context_index${D}socraticode`,
+    `codebase_context_remove${D}socraticode`,
+    `codebase_health${D}socraticode`,
+    `codebase_list_projects${D}socraticode`,
+    `codebase_about${D}socraticode`,
+  ],
   'llm.failover': [`chat_failover${D}admin-ops`, `chat_pipeline${D}admin-ops`],
   'admin.manage': [
     `list_api_keys${D}admin-ops`,
